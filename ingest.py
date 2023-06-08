@@ -116,11 +116,26 @@ def save_to_txt(documents):
             txt_filename = "".join(document.metadata['source'].split(".")[:-1]) + ".txt"
             Path(txt_filename).write_text(document.page_content)
 
-def add_metadata(documents):
+def add_metadata(documents, inject_in_the_page_content: bool = False):
     for document in documents:
         polizze = document.page_content.split("\n\n")[0].split("+")
-        document.metadata["polizze"] = polizze[0].strip()
+        if inject_in_the_page_content:
+            document.metadata["__polizze"] = [polizza for polizza in polizze]
+            # document.page_content = "Il documento fa riferimento alle polizze: " + ", ".join([polizza for polizza in polizze]) + "\n\n" + document.page_content
+        else:
+            document.metadata["polizze"] = [polizza for polizza in polizze]
     return documents
+
+def inject_metadata(texts):
+    for text in texts:
+        context = ""
+        for k, v in text.metadata.items():
+            if not k.startswith("__"):
+                continue
+            context += f"Il documento fa riferimento a {k[2:]}: {','.join(v)}\n\n"
+        text.page_content = context + text.page_content
+        text.metadata.pop(k)
+    return texts
 
 def process_documents(ignored_files: List[str] = []) -> List[Document]:
     """
@@ -134,9 +149,10 @@ def process_documents(ignored_files: List[str] = []) -> List[Document]:
     print(f"Loaded {len(documents)} new documents from {source_directory}")
     # save_to_txt(documents)
     # break
-    documents = add_metadata(documents)
+    documents = add_metadata(documents, inject_in_the_page_content=True)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     texts = text_splitter.split_documents(documents)
+    texts = inject_metadata(texts)
     print(f"Split into {len(texts)} chunks of text (max. {chunk_size} tokens each)")
     return texts
 

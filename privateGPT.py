@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
+from typing import List
 from dotenv import load_dotenv
 from langchain.chains import RetrievalQA
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp
-from langchain.retrievers.self_query.base import SelfQueryRetriever
-from langchain.chains.query_constructor.base import AttributeInfo
 
 import os
 import argparse
@@ -23,6 +22,19 @@ target_source_chunks = int(os.environ.get('TARGET_SOURCE_CHUNKS',4))
 
 from constants import CHROMA_SETTINGS
 
+from langchain.embeddings.base import Embeddings
+from transformers import AutoTokenizer, AutoModel
+
+class T5Embeder(Embeddings):
+    def __init__(self) -> None:
+        self.tokenizer = AutoTokenizer.from_pretrained('intfloat/e5-large-v2')
+        self.model = AutoModel.from_pretrained('intfloat/e5-large-v2')
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        pass
+
+    def embed_query(self, text: str) -> List[float]:
+        pass
 def main():
     # Parse the command line arguments
     args = parse_arguments()
@@ -40,25 +52,7 @@ def main():
         case _default:
             print(f"Model {model_type} not supported!")
             exit;
-
-
-    def pretty_print_docs(docs):
-        print(f"\n{'-' * 100}\n".join([f"Document {i+1}:\n\n" + d.page_content for i, d in enumerate(docs)]))
     
-    metadata_field_info=[
-        AttributeInfo(
-            name="polizze",
-            description="The insurance policies referred to in the document", 
-            type="string or list[string]", 
-        ),
-        AttributeInfo(
-            name="source",
-            description="The name of the file", 
-            type="string", 
-        ),
-    ]
-    document_content_description = "The brochure of some insurance policies"
-    retriever = SelfQueryRetriever.from_llm(llm, db, document_content_description, metadata_field_info, verbose=True)
     qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents= not args.hide_source)
     # Interactive questions and answers
     while True:
