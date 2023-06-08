@@ -5,6 +5,9 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp
+from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain.chains.query_constructor.base import AttributeInfo
+
 import os
 import argparse
 
@@ -31,12 +34,31 @@ def main():
     # Prepare the LLM
     match model_type:
         case "LlamaCpp":
-            llm = LlamaCpp(model_path=model_path, n_ctx=model_n_ctx, callbacks=callbacks, verbose=False)
+            llm = LlamaCpp(model_path=model_path, n_ctx=model_n_ctx, callbacks=callbacks, verbose=False, temperature=0.0)
         case "GPT4All":
             llm = GPT4All(model=model_path, n_ctx=model_n_ctx, backend='gptj', callbacks=callbacks, verbose=False)
         case _default:
             print(f"Model {model_type} not supported!")
             exit;
+
+
+    def pretty_print_docs(docs):
+        print(f"\n{'-' * 100}\n".join([f"Document {i+1}:\n\n" + d.page_content for i, d in enumerate(docs)]))
+    
+    metadata_field_info=[
+        AttributeInfo(
+            name="polizze",
+            description="The insurance policies referred to in the document", 
+            type="string or list[string]", 
+        ),
+        AttributeInfo(
+            name="source",
+            description="The name of the file", 
+            type="string", 
+        ),
+    ]
+    document_content_description = "The brochure of some insurance policies"
+    retriever = SelfQueryRetriever.from_llm(llm, db, document_content_description, metadata_field_info, verbose=True)
     qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents= not args.hide_source)
     # Interactive questions and answers
     while True:
