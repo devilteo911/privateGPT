@@ -5,6 +5,7 @@ from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
 from tqdm import tqdm
+from pathlib import Path
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -110,6 +111,17 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
 
     return results
 
+def save_to_txt(documents):
+        for document in documents:
+            txt_filename = "".join(document.metadata['source'].split(".")[:-1]) + ".txt"
+            Path(txt_filename).write_text(document.page_content)
+
+def add_metadata(documents):
+    for document in documents:
+        polizze = document.page_content.split("\n\n")[0].split("+")
+        document.metadata["polizze"] = polizze[0].strip()
+    return documents
+
 def process_documents(ignored_files: List[str] = []) -> List[Document]:
     """
     Load documents and split in chunks
@@ -120,6 +132,9 @@ def process_documents(ignored_files: List[str] = []) -> List[Document]:
         print("No new documents to load")
         exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
+    # save_to_txt(documents)
+    # break
+    documents = add_metadata(documents)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     texts = text_splitter.split_documents(documents)
     print(f"Split into {len(texts)} chunks of text (max. {chunk_size} tokens each)")
