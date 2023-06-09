@@ -6,6 +6,8 @@ from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp, CTransformers
+from base import T5Embedder
+
 import os
 import argparse
 
@@ -21,38 +23,11 @@ target_source_chunks = int(os.environ.get("TARGET_SOURCE_CHUNKS", 4))
 
 from constants import CHROMA_SETTINGS
 
-from langchain.embeddings.base import Embeddings
-from transformers import AutoTokenizer, AutoModel
 
-class T5Embeder(Embeddings):
-    def __init__(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained('intfloat/e5-large-v2')
-        self.model = AutoModel.from_pretrained('intfloat/e5-large-v2')
-    
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        pass
-
-    def embed_query(self, text: str) -> List[float]:
-        pass
-    
-
-from langchain.embeddings.base import Embeddings
-from transformers import AutoTokenizer, AutoModel
-
-class T5Embeder(Embeddings):
-    def __init__(self) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained('intfloat/e5-large-v2')
-        self.model = AutoModel.from_pretrained('intfloat/e5-large-v2')
-    
-    def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        pass
-
-    def embed_query(self, text: str) -> List[float]:
-        pass
 def main():
     # Parse the command line arguments
     args = parse_arguments()
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+    embeddings = T5Embedder(model_name=embeddings_model_name)
     db = Chroma(
         persist_directory=persist_directory,
         embedding_function=embeddings,

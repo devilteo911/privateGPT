@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from multiprocessing import Pool
 from tqdm import tqdm
 from pathlib import Path
+from base import T5Embedder
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -171,7 +172,7 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
 
 def main():
     # Create embeddings
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+    embeddings = T5Embedder(model_name=embeddings_model_name)
 
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
