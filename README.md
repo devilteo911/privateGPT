@@ -1,3 +1,12 @@
+# IMPORTANT BEFORE INSTALLING
+In order to work with this framework you have to install the llama-cpp-python library. To use the gpu you must use this command:
+
+```
+CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install llama-cpp-python==0.1.59 --no-cache-dir
+```
+
+Unless there are some major changes in the library, the version is not mandatory. 
+
 # privateGPT
 Ask questions to your documents without an internet connection, using the power of LLMs. 100% private, no data leaves your execution environment at any point. You can ingest documents and ask questions without an internet connection!
 
