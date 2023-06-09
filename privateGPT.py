@@ -8,6 +8,7 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp, CTransformers
 from base import T5Embedder
+from constants import QUESTIONS
 
 import os
 import argparse
@@ -41,12 +42,12 @@ def main():
     # activate/deactivate the streaming StdOut callback for LLMs
     callbacks = [] if args.mute_stream else [StreamingStdOutCallbackHandler()]
     logs_filename = pick_logs_filename(
+        save_path="logs",
         model_path=model_path,
         embeddings_model_name=embeddings_model_name,
         model_n_ctx=model_n_ctx,
         target_source_chunks=target_source_chunks,
     )
-    chat_history = open(logs_filename, "w")
     # Prepare the LLM
     match model_type:
         case "LlamaCpp":
@@ -95,9 +96,16 @@ def main():
     # Interactive questions and answers
     while True:
         try:
-            query = input("\nEnter a query: ")
-            if query == "exit":
-                break
+            if not args.automated_test:
+                query = input("\nEnter a query: ")
+                if query == "exit":
+                    break
+            else:
+                if len(QUESTIONS) == 0:
+                    break
+                query = QUESTIONS[0]
+                print("Auto Query: ", query)
+                QUESTIONS.pop(0)
 
             # Get the answer from the chain
             res = qa(query)
@@ -107,10 +115,12 @@ def main():
             )
 
             # writing the results on file
-            chat_history.write("\n\n> Question:")
-            chat_history.write(query)
-            chat_history.write("\n> Answer:")
-            chat_history.write(answer)
+
+            with open(logs_filename, "w") as chat_history:
+                chat_history.write("\n\n> Question:")
+                chat_history.write(query)
+                chat_history.write("\n> Answer:")
+                chat_history.write(answer)
 
             # Print the result
             print("\n\n> Question:")
@@ -151,6 +161,13 @@ def parse_arguments():
         "-H",
         action="store_true",
         help="Use this flag to save the log of the chat to the disk",
+    )
+
+    parser.add_argument(
+        "--automated_test",
+        "-A",
+        action="store_false",
+        help="Use this flag to test a set of question in order to judge the quality of the model",
     )
 
     return parser.parse_args()
