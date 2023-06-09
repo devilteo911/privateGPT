@@ -13,6 +13,8 @@ import os
 import argparse
 from datetime import datetime
 
+from methods import pick_logs_filename
+
 load_dotenv()
 
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
@@ -38,12 +40,11 @@ def main():
     retriever = db.as_retriever(search_kwargs={"k": target_source_chunks})
     # activate/deactivate the streaming StdOut callback for LLMs
     callbacks = [] if args.mute_stream else [StreamingStdOutCallbackHandler()]
-    logs_filename = "{}_{}_{}_{}_{}.txt".format(
-        model_path.split("/")[-1],
-        (embeddings_model_name.split("/")[2]).split("--")[1],
-        model_n_ctx,
-        target_source_chunks,
-        datetime.now(),
+    logs_filename = pick_logs_filename(
+        model_path=model_path,
+        embeddings_model_name=embeddings_model_name,
+        model_n_ctx=model_n_ctx,
+        target_source_chunks=target_source_chunks,
     )
     chat_history = open(logs_filename, "w")
     # Prepare the LLM
