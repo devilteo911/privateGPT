@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from typing import List
 from dotenv import load_dotenv
 from langchain.chains import RetrievalQA
@@ -10,6 +11,7 @@ from base import T5Embedder
 
 import os
 import argparse
+from datetime import datetime
 
 load_dotenv()
 
@@ -36,6 +38,14 @@ def main():
     retriever = db.as_retriever(search_kwargs={"k": target_source_chunks})
     # activate/deactivate the streaming StdOut callback for LLMs
     callbacks = [] if args.mute_stream else [StreamingStdOutCallbackHandler()]
+    logs_filename = "{}_{}_{}_{}_{}.txt".format(
+        model_path.split("/")[-1],
+        (embeddings_model_name.split("/")[2]).split("--")[1],
+        model_n_ctx,
+        target_source_chunks,
+        datetime.now(),
+    )
+    chat_history = open(logs_filename, "w")
     # Prepare the LLM
     match model_type:
         case "LlamaCpp":
@@ -83,27 +93,37 @@ def main():
     )
     # Interactive questions and answers
     while True:
-        query = input("\nEnter a query: ")
-        if query == "exit":
-            break
+        try:
+            query = input("\nEnter a query: ")
+            if query == "exit":
+                break
 
-        # Get the answer from the chain
-        res = qa(query)
-        answer, docs = (
-            res["result"],
-            [] if args.hide_source else res["source_documents"],
-        )
+            # Get the answer from the chain
+            res = qa(query)
+            answer, docs = (
+                res["result"],
+                [] if args.hide_source else res["source_documents"],
+            )
 
-        # Print the result
-        print("\n\n> Question:")
-        print(query)
-        print("\n> Answer:")
-        print(answer)
+            # writing the results on file
+            chat_history.write("\n\n> Question:")
+            chat_history.write(query)
+            chat_history.write("\n> Answer:")
+            chat_history.write(answer)
 
-        # Print the relevant sources used for the answer
-        for document in docs:
-            print("\n> " + document.metadata["source"] + ":")
-            print(document.page_content)
+            # Print the result
+            print("\n\n> Question:")
+            print(query)
+            print("\n> Answer:")
+            print(answer)
+
+            # Print the relevant sources used for the answer
+            for document in docs:
+                print("\n> " + document.metadata["source"] + ":")
+                print(document.page_content)
+        except KeyboardInterrupt:
+            chat_history.close()
+            sys.exit()
 
 
 def parse_arguments():
@@ -123,6 +143,13 @@ def parse_arguments():
         "-M",
         action="store_true",
         help="Use this flag to disable the streaming StdOut callback for LLMs.",
+    )
+
+    parser.add_argument(
+        "--chat_history",
+        "-H",
+        action="store_true",
+        help="Use this flag to save the log of the chat to the disk",
     )
 
     return parser.parse_args()
