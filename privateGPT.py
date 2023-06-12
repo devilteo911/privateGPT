@@ -13,6 +13,7 @@ from constants import QUESTIONS
 import os
 import argparse
 from datetime import datetime
+from pathlib import Path
 
 from methods import pick_logs_filename
 
@@ -93,6 +94,8 @@ def main():
         retriever=retriever,
         return_source_documents=not args.hide_source,
     )
+
+    Path(logs_filename).touch()
     # Interactive questions and answers
     while True:
         try:
@@ -116,7 +119,7 @@ def main():
 
             # writing the results on file
 
-            with open(logs_filename, "w") as chat_history:
+            with open(logs_filename, "a") as chat_history:
                 chat_history.write("\n\n> Question:")
                 chat_history.write(query)
                 chat_history.write("\n> Answer:")
