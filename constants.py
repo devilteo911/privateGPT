@@ -24,3 +24,9 @@ QUESTIONS = [
     "Quanto pago per in caso di utilizzo dei ticket?",
     "Quali sono le strutture convenzionate con il Network Previmedical per effettuare le prestazioni in forma diretta?",
 ]
+
+QUESTIONS_MULTI_DOC = [
+    "Quali sono i massimali di tutte le polizze?",
+    "Qual è il massimale per la polizza base p?",
+    "Qual è la quota a carico dell'assicurazione?",
+]
