@@ -8,61 +8,53 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp, CTransformers
-from base import T5Embedder
+from base import Logs, T5Embedder
 from constants import COMBINED_TEMPLATE, QUESTION_TEMPLATE, QUESTIONS
 from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 
 import os
 import argparse
+import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
+
 from methods import pick_logs_filename
+from constants import CHROMA_SETTINGS
 
 load_dotenv()
 
-embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
+
 persist_directory = os.environ.get("PERSIST_DIRECTORY")
 
-model_type = os.environ.get("MODEL_TYPE")
-model_path = os.environ.get("MODEL_PATH")
-model_n_ctx = os.environ.get("MODEL_N_CTX")
-target_source_chunks = int(os.environ.get("TARGET_SOURCE_CHUNKS", 4))
+params = {
+    "model_path": os.environ.get("MODEL_PATH"),
+    "model_type": os.environ.get("MODEL_TYPE"),
+    "embedding_model": os.environ.get("EMBEDDINGS_MODEL_NAME"),
+    "model_n_ctx": os.environ.get("MODEL_N_CTX"),
+    "target_source_chunks": int(os.environ.get("TARGET_SOURCE_CHUNKS", 4)),
+    "qa": [],
+    "temperature": 0.2,
+    "top_k": 50,
+    "top_p": 0.2,
+    "repeat_penalty": 1.2,
+    "chain_type": "stuff",
+}
 
-from constants import CHROMA_SETTINGS
 
-
-def main():
-    # Parse the command line arguments
-    args = parse_arguments()
-    embeddings = HuggingFaceInstructEmbeddings(model_name=embeddings_model_name)
-    db = Chroma(
-        persist_directory=persist_directory,
-        embedding_function=embeddings,
-        client_settings=CHROMA_SETTINGS,
-    )
-    retriever = db.as_retriever(search_kwargs={"k": target_source_chunks})
-    # activate/deactivate the streaming StdOut callback for LLMs
-    callbacks = [] if args.mute_stream else [StreamingStdOutCallbackHandler()]
-    logs_filename = pick_logs_filename(
-        save_path="logs",
-        model_path=model_path,
-        embeddings_model_name=embeddings_model_name,
-        model_n_ctx=model_n_ctx,
-        target_source_chunks=target_source_chunks,
-    )
+def choose_model(params, callbacks):
     # Prepare the LLM
-    match model_type:
+    match params["model_type"]:
         case "LlamaCpp":
             llm = LlamaCpp(
-                model_path=model_path,
-                n_ctx=model_n_ctx,
+                model_path=params["model_path"],
+                n_ctx=params["model_n_ctx"],
                 callbacks=callbacks,
                 verbose=False,
-                temperature=0.2,
-                top_k=50,
-                top_p=0.2,
-                repeat_penalty=1.2,
+                temperature=params["temperature"],
+                top_k=params["top_k"],
+                top_p=params["top_p"],
+                repeat_penalty=params["repeat_penalty"],
                 n_gpu_layers=2000000,
                 n_batch=512,
                 n_threads=8,
@@ -72,22 +64,42 @@ def main():
         case "CTransformers":
             config = {
                 "gpu_layers": 40,
-                "temperature": 0.0,
+                "temperature": params["temperature"],
                 "max_new_tokens": 1024,
                 "stream": True,
             }
-            llm = CTransformers(model=model_path, config=config, model_type="mpt")
+            llm = CTransformers(
+                model=params["model_path"], config=config, model_type="mpt"
+            )
         case "GPT4All":
             llm = GPT4All(
-                model=model_path,
-                n_ctx=model_n_ctx,
+                model=params["model_path"],
+                n_ctx=params["model_n_ctx"],
                 backend="gptj",
                 callbacks=callbacks,
                 verbose=False,
             )
         case _default:
-            print(f"Model {model_type} not supported!")
+            print(f"Model {params['model_type']} not supported!")
             exit
+
+    return llm
+
+
+def main():
+    # Parse the command line arguments
+    args = parse_arguments()
+    embeddings = HuggingFaceInstructEmbeddings(model_name=params["embedding_model"])
+    db = Chroma(
+        persist_directory=persist_directory,
+        embedding_function=embeddings,
+        client_settings=CHROMA_SETTINGS,
+    )
+    retriever = db.as_retriever(search_kwargs={"k": params["target_source_chunks"]})
+    # activate/deactivate the streaming StdOut callback for LLMs
+
+    callbacks = [] if args.mute_stream else [StreamingStdOutCallbackHandler()]
+    llm = choose_model(params, callbacks)
 
     # QUESTION_PROMPT = PromptTemplate(
     #     template=QUESTION_TEMPLATE, input_variables=["context", "question"]
@@ -98,7 +110,7 @@ def main():
 
     qa = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type="stuff",
+        chain_type=params["chain_type"],
         retriever=retriever,
         return_source_documents=not args.hide_source,
         # chain_type_kwargs={
@@ -107,7 +119,7 @@ def main():
         # },
     )
 
-    Path(logs_filename).touch()
+    logs = Logs(params)
     # Interactive questions and answers
     while True:
         try:
@@ -117,6 +129,7 @@ def main():
                     break
             else:
                 if len(QUESTIONS) == 0:
+                    logs.save_to_disk()
                     break
                 query = QUESTIONS[0]
                 print("Auto Query: ", query)
@@ -131,11 +144,7 @@ def main():
 
             # writing the results on file
 
-            with open(logs_filename, "a") as chat_history:
-                chat_history.write("\n\n> Question:")
-                chat_history.write(query)
-                chat_history.write("\n> Answer:")
-                chat_history.write(answer)
+            logs.add_row((query, answer))
 
             # Print the result
             print("\n\n> Question:")
@@ -148,7 +157,7 @@ def main():
                 print("\n> " + document.metadata["source"] + ":")
                 print(document.page_content)
         except KeyboardInterrupt:
-            chat_history.close()
+            logs.save_to_disk()
             sys.exit()
 
 

@@ -1,7 +1,10 @@
+import json
+from datetime import datetime
 from typing import List
+
+import pandas as pd
 from langchain.embeddings.base import Embeddings
-from transformers import AutoTokenizer, AutoModel
-from llama_cpp import Llama
+from transformers import AutoModel, AutoTokenizer
 
 
 class T5Embedder(Embeddings):
@@ -47,3 +50,19 @@ class T5Embedder(Embeddings):
 
     def get_tokenizer(self) -> AutoTokenizer:
         return self.tokenizer
+
+
+class Logs:
+    def __init__(self, params):
+        self.params = params
+        self.df: pd.DataFrame = pd.DataFrame(columns=["Question", "Answer"])
+        self.filename = f"logs/{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}.json"
+
+    def add_row(self, row_data):
+        self.df.loc[len(self.df)] = row_data
+
+    def save_to_disk(self):
+        qa_json = self.df.to_dict(orient="records")
+        self.params["qa"] = qa_json
+        with open(self.filename, "w") as f:
+            json.dump(self.params, f)
