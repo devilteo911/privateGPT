@@ -2,13 +2,15 @@
 import sys
 from typing import List
 from dotenv import load_dotenv
+from langchain import PromptTemplate
 from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
 from langchain.llms import GPT4All, LlamaCpp, CTransformers
 from base import T5Embedder
-from constants import QUESTIONS
+from constants import COMBINED_TEMPLATE, QUESTION_TEMPLATE, QUESTIONS
+from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 
 import os
 import argparse
@@ -33,7 +35,7 @@ from constants import CHROMA_SETTINGS
 def main():
     # Parse the command line arguments
     args = parse_arguments()
-    embeddings = T5Embedder(model_name=embeddings_model_name)
+    embeddings = HuggingFaceInstructEmbeddings(model_name=embeddings_model_name)
     db = Chroma(
         persist_directory=persist_directory,
         embedding_function=embeddings,
@@ -57,7 +59,10 @@ def main():
                 n_ctx=model_n_ctx,
                 callbacks=callbacks,
                 verbose=False,
-                temperature=0.0,
+                temperature=0.2,
+                top_k=50,
+                top_p=0.2,
+                repeat_penalty=1.2,
                 n_gpu_layers=2000000,
                 n_batch=512,
                 n_threads=8,
@@ -70,13 +75,8 @@ def main():
                 "temperature": 0.0,
                 "max_new_tokens": 1024,
                 "stream": True,
-                "threads": 0,
             }
-            llm = CTransformers(
-                model=model_path,
-                model_type="llama",
-                config=config,
-            )
+            llm = CTransformers(model=model_path, config=config, model_type="mpt")
         case "GPT4All":
             llm = GPT4All(
                 model=model_path,
@@ -88,11 +88,23 @@ def main():
         case _default:
             print(f"Model {model_type} not supported!")
             exit
+
+    # QUESTION_PROMPT = PromptTemplate(
+    #     template=QUESTION_TEMPLATE, input_variables=["context", "question"]
+    # )
+    # COMBINE_PROMPT = PromptTemplate(
+    #     template=COMBINED_TEMPLATE, input_variables=["summaries", "question"]
+    # )
+
     qa = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
         retriever=retriever,
         return_source_documents=not args.hide_source,
+        # chain_type_kwargs={
+        #     "question_prompt": QUESTION_PROMPT,
+        #     "combine_prompt": COMBINE_PROMPT,
+        # },
     )
 
     Path(logs_filename).touch()

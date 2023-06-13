@@ -30,3 +30,20 @@ QUESTIONS_MULTI_DOC = [
     "Qual è il massimale per la polizza base p?",
     "Qual è la quota a carico dell'assicurazione?",
 ]
+
+QUESTION_TEMPLATE = """Use the following portion of a long document to see if any of the text is relevant to answer the question. 
+Return any relevant text in Italian.
+{context}
+Question: {question}
+Relevant text, if any, in Italian:"""
+
+COMBINED_TEMPLATE = """Given the following extracted parts of a long document and a question, create a final answer with references ("SOURCES"). 
+If you don't know the answer, just say that you don't know. Don't try to make up an answer.
+ALWAYS return a "SOURCES" part in your answer.
+Respond in Italian.
+
+QUESTION: {question}
+=========
+{summaries}
+=========
+FINAL ANSWER IN ITALIAN:"""

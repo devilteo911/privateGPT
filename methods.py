@@ -26,6 +26,15 @@ def pick_logs_filename(**kwargs):
             kwargs["target_source_chunks"],
             datetime.now(),
         )
+    elif ".bin" in emb_path:
+        logs_filename = "{}/{}_{}_{}_{}_{}.txt".format(
+            save_path,
+            model_path.split("/")[-1],
+            emb_path.split("/")[-1],
+            kwargs["model_n_ctx"],
+            kwargs["target_source_chunks"],
+            datetime.now(),
+        )
     else:
         logs_filename = "{}/{}_{}_{}_{}_{}.txt".format(
             save_path,
