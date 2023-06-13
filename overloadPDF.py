@@ -111,7 +111,7 @@ def main():
                 QUESTIONS.pop(0)
 
             # Get the answer from the chain
-            res = qa(query)
+            res = qa(query + ". Answer in italian.")
             answer, docs = (
                 res["result"],
                 [] if args.hide_source else res["source_documents"],
