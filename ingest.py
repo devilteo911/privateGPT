@@ -138,7 +138,7 @@ def inject_metadata(texts):
         text.metadata.pop(k)
     return texts
 
-def process_documents(ignored_files: List[str] = []) -> List[Document]:
+def process_documents(embeddings ,ignored_files: List[str] = []) -> List[Document]:
     """
     Load documents and split in chunks
     """
@@ -151,7 +151,7 @@ def process_documents(ignored_files: List[str] = []) -> List[Document]:
     # save_to_txt(documents)
     # break
     documents = add_metadata(documents, inject_in_the_page_content=True)
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(embeddings.get_tokenizer(), chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     texts = text_splitter.split_documents(documents)
     texts = inject_metadata(texts)
     print(f"Split into {len(texts)} chunks of text (max. {chunk_size} tokens each)")
@@ -179,13 +179,13 @@ def main():
         print(f"Appending to existing vectorstore at {persist_directory}")
         db = Chroma(persist_directory=persist_directory, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
         collection = db.get()
-        texts = process_documents([metadata['source'] for metadata in collection['metadatas']])
+        texts = process_documents(embeddings, [metadata['source'] for metadata in collection['metadatas']])
         print(f"Creating embeddings. May take some minutes...")
         db.add_documents(texts)
     else:
         # Create and store locally vectorstore
         print("Creating new vectorstore")
-        texts = process_documents()
+        texts = process_documents(embeddings=embeddings)
         print(f"Creating embeddings. May take some minutes...")
         db = Chroma.from_documents(texts, embeddings, persist_directory=persist_directory, client_settings=CHROMA_SETTINGS)
     db.persist()
