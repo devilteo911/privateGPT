@@ -32,33 +32,25 @@ ggml_model, retriever = load_llm_and_retriever(params, rest=True)
 def inference(query: Query):
     params.update(query["params"])
 
-    # llm = overwrite_llm_params(ggml_model, params)
-    llm = ggml_model
-    qa = select_retrieval_chain(llm, retriever, params)
+    qa = select_retrieval_chain(ggml_model, retriever, params)
 
     docs_to_return = []
     # Interactive questions and answers
-    while True:
-        try:
-            if not args.automated_test:
-                try:
-                    query = query["query"]
-                except AttributeError:
-                    break
 
-            # Get the answer from the chain
-            res = qa(query + ". Answer in italian.")
-            print(res)
-            answer, docs = (
-                res["result"],
-                [] if args.hide_source else res["source_documents"],
-            )
+    query = query["query"]
 
-            # # Print the relevant sources used for the answer
-            for document in docs:
-                docs_to_return.append(document.page_content)
-        except KeyboardInterrupt:
-            sys.exit()
+    # Get the answer from the chain
+    res = qa(query + ". Answer in italian.")
+    print(res.keys())
+    answer, docs = (
+        res["result"],
+        [] if args.hide_source else res["source_documents"],
+    )
+
+    # # Print the relevant sources used for the answer
+    for document in docs:
+        docs_to_return.append(document.page_content)
+
     return {"answer": answer, "docs": docs_to_return}
 
 

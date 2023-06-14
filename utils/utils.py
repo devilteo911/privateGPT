@@ -39,7 +39,7 @@ def initialize_llm(params, callbacks, rest=False):
         langchain.llms.base.LLM: The initialized LLM object.
     """
     if rest:
-        return OpenAI()
+        return OpenAI(streaming=True)
     else:
         # Prepare the LLM
         match params["model_type"]:
@@ -210,5 +210,3 @@ def parse_arguments():
     )
 
     return parser.parse_args()
-
-
