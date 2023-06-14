@@ -1,10 +1,11 @@
 import argparse
 import os
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 from fastapi.responses import StreamingResponse
 from langchain import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
+from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.chains import RetrievalQA
 from langchain.embeddings import HuggingFaceInstructEmbeddings
@@ -15,16 +16,24 @@ from langchain.vectorstores.base import VectorStore
 from langchain.llms import OpenAI
 
 from loguru import logger
+import streamlit as st
 
 from constants import CHROMA_SETTINGS, COMBINED_TEMPLATE, QUESTION_TEMPLATE
 
 from .fastapi_utils import astreamer
 
 
-class MyCustomCallbackHandler(BaseCallbackHandler):
-    def on_llm_new_token(self, token: str, **kwargs) -> None:
-        # your function for streaming eg. send a Server Side Event or update realtime database
-        return StreamingResponse(astreamer(token), media_type="text/event-stream")
+class SimpleStreamlitCallbackHandler(BaseCallbackHandler):
+    """Callback Handler that logs to streamlit."""
+
+    def __init__(self) -> None:
+        self.tokens_area = st.empty()
+        self.tokens_stream = ""
+
+    def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+        """Run on new LLM token. Only available when streaming is enabled."""
+        self.tokens_stream += token
+        self.tokens_area.write(self.tokens_stream)
 
 
 def initialize_llm(params, callbacks, rest=False):
@@ -39,7 +48,12 @@ def initialize_llm(params, callbacks, rest=False):
         langchain.llms.base.LLM: The initialized LLM object.
     """
     if rest:
-        return OpenAI(streaming=True)
+        return OpenAI(
+            temperature=params["temperature"],
+            top_p=params["top_p"],
+            streaming=True,
+            callbacks=callbacks,
+        )
     else:
         # Prepare the LLM
         match params["model_type"]:
@@ -96,17 +110,17 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
     Returns:
         langchain.llms.base.LLM: The modified LLM object.
     """
-    logger.info(f"Before: {llm.temperature, llm.top_k, llm.top_p, llm.repeat_penalty}")
+    logger.info(f"Before: {llm.temperature, llm.top_p}")
     llm.temperature = params["temperature"]
-    llm.top_k = params["top_k"]
     llm.top_p = params["top_p"]
-    llm.repeat_penalty = params["repeat_penalty"]
-    logger.info(f"After: {llm.temperature, llm.top_k, llm.top_p, llm.repeat_penalty}")
+    logger.info(f"After: {llm.temperature, llm.top_p}")
 
     return llm
 
 
-def load_llm_and_retriever(params: Dict[str, any], rest=False) -> Tuple[LLM, Chroma]:
+def load_llm_and_retriever(
+    params: Dict[str, any], callbacks, rest=False
+) -> Tuple[LLM, Chroma]:
     """
     Loads a language model and a retriever based on the given parameters.
 
@@ -127,7 +141,6 @@ def load_llm_and_retriever(params: Dict[str, any], rest=False) -> Tuple[LLM, Chr
         client_settings=CHROMA_SETTINGS,
     )
     retriever = db.as_retriever(search_kwargs={"k": params["target_source_chunks"]})
-    callbacks = [MyCustomCallbackHandler()]
     llm = initialize_llm(params, callbacks, rest=rest)
 
     return llm, retriever

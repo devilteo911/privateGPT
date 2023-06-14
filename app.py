@@ -2,8 +2,9 @@ from fastapi import Query
 import requests
 import streamlit as st
 from routes.overloadPDF import inference
+from utils.utils import SimpleStreamlitCallbackHandler
 
-st.set_page_config(page_title="Overload PDF Chat", layout="wide")
+# st.set_page_config(page_title="Overload PDF Chat", layout="wide")
 
 # Sidebar
 st.sidebar.title("Menu")
@@ -17,9 +18,7 @@ repeat_penalty = st.sidebar.slider("Repeat Penalty", 1.0, 2.0, 1.2, 0.1)
 
 params = {
     "temperature": temperature,
-    "top_k": top_k,
     "top_p": top_p,
-    "repeat_penalty": repeat_penalty,
 }
 
 
@@ -27,10 +26,15 @@ params = {
 st.title("⚡ Overload PDF Chat 🤖")
 query = st.text_input("Enter your question here")
 if st.button("Get Answer"):
-    res = inference({"query": "quali sono i massimali", "params": {}})
+    res_box = st.empty()
+    with st.spinner("typing..."):
+        res = inference(
+            {"query": query, "params": params},
+            callbacks=[SimpleStreamlitCallbackHandler()],
+        )
 
-    st.write(res["answer"])
-    with st.expander("Document Similarity Search"):
-        # Find the relevant pages
-        # Write out the first
-        st.write(res["docs"])
+        # st.write(res["answer"])
+        with st.expander("Document Similarity Search"):
+            # Find the relevant pages
+            # Write out the first
+            st.write(res["docs"])

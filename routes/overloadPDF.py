@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from dotenv import load_dotenv
+from loguru import logger
 from pydantic import BaseModel
 from base import QALogger
 from constants import QUESTIONS
@@ -25,13 +26,14 @@ load_dotenv()
 router = APIRouter()
 args = parse_arguments()
 params = PARAMS.copy()
-ggml_model, retriever = load_llm_and_retriever(params, rest=True)
 
 
 # @router.post("/overloadPDF")
-def inference(query: Query):
+def inference(query: Query, callbacks):
     params.update(query["params"])
 
+    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
+    ggml_model = overwrite_llm_params(ggml_model, params)
     qa = select_retrieval_chain(ggml_model, retriever, params)
 
     docs_to_return = []
@@ -41,11 +43,12 @@ def inference(query: Query):
 
     # Get the answer from the chain
     res = qa(query + ". Answer in italian.")
-    print(res.keys())
     answer, docs = (
         res["result"],
         [] if args.hide_source else res["source_documents"],
     )
+
+    print(res)
 
     # # Print the relevant sources used for the answer
     for document in docs:
