@@ -47,3 +47,18 @@ QUESTION: {question}
 {summaries}
 =========
 FINAL ANSWER IN ITALIAN:"""
+
+
+PARAMS = {
+    "model_path": os.environ.get("MODEL_PATH"),
+    "model_type": os.environ.get("MODEL_TYPE"),
+    "embedding_model": os.environ.get("EMBEDDINGS_MODEL_NAME"),
+    "model_n_ctx": os.environ.get("MODEL_N_CTX"),
+    "target_source_chunks": int(os.environ.get("TARGET_SOURCE_CHUNKS", 4)),
+    "qa": [],
+    "temperature": 0.2,
+    "top_k": 50,
+    "top_p": 0.2,
+    "repeat_penalty": 1.2,
+    "chain_type": "stuff",
+}

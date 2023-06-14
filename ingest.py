@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from multiprocessing import Pool
 from tqdm import tqdm
 from pathlib import Path
-from base import T5Embedder
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -22,7 +21,7 @@ from langchain.document_loaders import (
     UnstructuredWordDocumentLoader,
 )
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter, TokenTextSplitter
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.docstore.document import Document
 from langchain.embeddings import HuggingFaceInstructEmbeddings
@@ -36,7 +35,7 @@ load_dotenv()
 persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
-chunk_size = 400
+chunk_size = 300
 chunk_overlap = 0
 
 
@@ -211,13 +210,13 @@ def main():
         texts = process_documents(
             embeddings, [metadata["source"] for metadata in collection["metadatas"]]
         )
-        print(f"Creating embeddings. May take some minutes...")
+        print("Creating embeddings. May take some minutes...")
         db.add_documents(texts)
     else:
         # Create and store locally vectorstore
         print("Creating new vectorstore")
         texts = process_documents(embeddings=embeddings)
-        print(f"Creating embeddings. May take some minutes...")
+        print("Creating embeddings. May take some minutes...")
         db = Chroma.from_documents(
             texts,
             embeddings,
@@ -227,7 +226,7 @@ def main():
     db.persist()
     db = None
 
-    print(f"Ingestion complete! You can now run privateGPT.py to query your documents")
+    print("Ingestion complete! You can now run privateGPT.py to query your documents")
 
 
 if __name__ == "__main__":

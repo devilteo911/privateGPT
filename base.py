@@ -52,7 +52,7 @@ class T5Embedder(Embeddings):
         return self.tokenizer
 
 
-class Logs:
+class QALogger:
     def __init__(self, params):
         self.params = params
         self.df: pd.DataFrame = pd.DataFrame(columns=["Question", "Answer"])
