@@ -1,5 +1,7 @@
+from fastapi import Query
 import requests
 import streamlit as st
+from routes.overloadPDF import inference
 
 st.set_page_config(page_title="Overload PDF Chat", layout="wide")
 
@@ -25,17 +27,20 @@ params = {
 st.title("⚡ Overload PDF Chat 🤖")
 query = st.text_input("Enter your question here")
 if st.button("Get Answer"):
-    response = requests.post(
-        "http://localhost:7700/api/overloadPDF",
-        json={"query": query, "params": params},
-        stream=True,
-    )
-    if response.status_code == 200:
-        res = response.json()
-        st.write(res["answer"])
-        with st.expander("Document Similarity Search"):
-            # Find the relevant pages
-            # Write out the first
-            st.write(res["docs"])
-    else:
-        st.write("Failed to get answer")
+    print(inference({"query":"quali sono i massimali", "params":{}}))
+
+    # response = requests.post(
+    #     "http://localhost:7700/api/overloadPDF",
+    #     json={"query": query, "params": params},
+    #     stream=True,
+    # )
+    # if response.status_code == 200:
+    #     res = response.json()
+    #     st.write(res["answer"])
+    #     with st.expander("Document Similarity Search"):
+    #         # Find the relevant pages
+    #         # Write out the first
+    #         st.write(res["docs"])
+    # else:
+    #     st.write("Failed to get answer")
+

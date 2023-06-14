@@ -12,6 +12,8 @@ from langchain.llms import CTransformers, GPT4All, LlamaCpp
 from langchain.llms.base import LLM
 from langchain.vectorstores import Chroma
 from langchain.vectorstores.base import VectorStore
+from langchain.llms import OpenAI
+
 from loguru import logger
 
 from constants import CHROMA_SETTINGS, COMBINED_TEMPLATE, QUESTION_TEMPLATE
@@ -25,7 +27,7 @@ class MyCustomCallbackHandler(BaseCallbackHandler):
         return StreamingResponse(astreamer(token), media_type="text/event-stream")
 
 
-def initialize_llm(params, callbacks):
+def initialize_llm(params, callbacks, rest=False):
     """
     Initializes a language model (LLM) based on the given parameters.
 
@@ -36,45 +38,48 @@ def initialize_llm(params, callbacks):
     Returns:
         langchain.llms.base.LLM: The initialized LLM object.
     """
-    # Prepare the LLM
-    match params["model_type"]:
-        case "LlamaCpp":
-            llm = LlamaCpp(
-                model_path=params["model_path"],
-                n_ctx=params["model_n_ctx"],
-                callbacks=callbacks,
-                verbose=False,
-                temperature=params["temperature"],
-                top_k=params["top_k"],
-                top_p=params["top_p"],
-                repeat_penalty=params["repeat_penalty"],
-                n_gpu_layers=2000000,
-                n_batch=512,
-                n_threads=8,
-                streaming=True,
-            )
+    if rest:
+        return OpenAI()
+    else:
+        # Prepare the LLM
+        match params["model_type"]:
+            case "LlamaCpp":
+                llm = LlamaCpp(
+                    model_path=params["model_path"],
+                    n_ctx=params["model_n_ctx"],
+                    callbacks=callbacks,
+                    verbose=False,
+                    temperature=params["temperature"],
+                    top_k=params["top_k"],
+                    top_p=params["top_p"],
+                    repeat_penalty=params["repeat_penalty"],
+                    n_gpu_layers=2000000,
+                    n_batch=512,
+                    n_threads=8,
+                    streaming=True,
+                )
 
-        case "CTransformers":
-            config = {
-                "gpu_layers": 40,
-                "temperature": params["temperature"],
-                "max_new_tokens": 1024,
-                "stream": True,
-            }
-            llm = CTransformers(
-                model=params["model_path"], config=config, model_type="mpt"
-            )
-        case "GPT4All":
-            llm = GPT4All(
-                model=params["model_path"],
-                n_ctx=params["model_n_ctx"],
-                backend="gptj",
-                callbacks=callbacks,
-                verbose=False,
-            )
-        case _default:
-            print(f"Model {params['model_type']} not supported!")
-            exit
+            case "CTransformers":
+                config = {
+                    "gpu_layers": 40,
+                    "temperature": params["temperature"],
+                    "max_new_tokens": 1024,
+                    "stream": True,
+                }
+                llm = CTransformers(
+                    model=params["model_path"], config=config, model_type="mpt"
+                )
+            case "GPT4All":
+                llm = GPT4All(
+                    model=params["model_path"],
+                    n_ctx=params["model_n_ctx"],
+                    backend="gptj",
+                    callbacks=callbacks,
+                    verbose=False,
+                )
+            case _default:
+                print(f"Model {params['model_type']} not supported!")
+                exit
 
     return llm
 
@@ -101,7 +106,7 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
     return llm
 
 
-def load_llm_and_retriever(params: Dict[str, any]) -> Tuple[LLM, Chroma]:
+def load_llm_and_retriever(params: Dict[str, any], rest=False) -> Tuple[LLM, Chroma]:
     """
     Loads a language model and a retriever based on the given parameters.
 
@@ -123,7 +128,7 @@ def load_llm_and_retriever(params: Dict[str, any]) -> Tuple[LLM, Chroma]:
     )
     retriever = db.as_retriever(search_kwargs={"k": params["target_source_chunks"]})
     callbacks = [MyCustomCallbackHandler()]
-    llm = initialize_llm(params, callbacks)
+    llm = initialize_llm(params, callbacks, rest=rest)
 
     return llm, retriever
 
@@ -205,3 +210,5 @@ def parse_arguments():
     )
 
     return parser.parse_args()
+
+
