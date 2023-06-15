@@ -5,6 +5,7 @@ from loguru import logger
 from pydantic import BaseModel
 from base import QALogger
 from constants import QUESTIONS
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
 
 from constants import PARAMS
@@ -42,7 +43,7 @@ def inference(query: Query, callbacks):
     query = query["query"]
 
     # Get the answer from the chain
-    res = qa(query + ". Answer in italian.")
+    res = qa(query)
     answer, docs = (
         res["result"],
         [] if args.hide_source else res["source_documents"],
@@ -58,9 +59,9 @@ def inference(query: Query, callbacks):
 
 
 @router.post("/multiTest")
-def multi_test(query: Query):
+def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler]):
     params.update(query.params)
-
+    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=False)
     llm = overwrite_llm_params(ggml_model, params)
     qa = select_retrieval_chain(llm, retriever, params)
 

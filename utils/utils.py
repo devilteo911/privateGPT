@@ -18,9 +18,14 @@ from langchain.llms import OpenAI
 from loguru import logger
 import streamlit as st
 
-from constants import CHROMA_SETTINGS, COMBINED_TEMPLATE, QUESTION_TEMPLATE
+from constants import (
+    CHROMA_SETTINGS,
+    COMBINED_TEMPLATE,
+    QUESTION_TEMPLATE,
+    STUFF_TEMPLATE,
+)
 
-from .fastapi_utils import astreamer
+from langchain.output_parsers import RegexParser
 
 
 class SimpleStreamlitCallbackHandler(BaseCallbackHandler):
@@ -177,11 +182,23 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                 },
             )
         case "stuff":
+            output_parser = RegexParser(
+                regex=r"(.*?)\nScore: (.*)",
+                output_keys=["answer", "score"],
+            )
+
+            STUFF_PROMPT = PromptTemplate(
+                template=STUFF_TEMPLATE,
+                input_variables=["context", "question"],
+                output_parser=output_parser,
+            )
+            chain_type_kwargs = {"prompt": STUFF_PROMPT}
             qa = RetrievalQA.from_chain_type(
                 llm=llm,
                 chain_type=params["chain_type"],
                 retriever=retriever,
                 return_source_documents=True,
+                chain_type_kwargs=chain_type_kwargs,
             )
         case _default:
             print(f"Chain type {params['chain_type']} not supported!")
