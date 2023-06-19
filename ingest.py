@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import glob
 from typing import List
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 from multiprocessing import Pool
 from tqdm import tqdm
 from pathlib import Path
+import argparse
 
 from langchain.document_loaders import (
     CSVLoader,
@@ -148,7 +150,9 @@ def inject_metadata(texts):
     return texts
 
 
-def process_documents(embeddings, ignored_files: List[str] = []) -> List[Document]:
+def process_documents(
+    embeddings, args, ignored_files: List[str] = []
+) -> List[Document]:
     """
     Load documents and split in chunks
     """
@@ -160,16 +164,42 @@ def process_documents(embeddings, ignored_files: List[str] = []) -> List[Documen
     print(f"Loaded {len(documents)} new documents from {source_directory}")
     # save_to_txt(documents)
     # break
-    documents = add_metadata(documents, inject_in_the_page_content=True)
+    # documents = add_metadata(documents, inject_in_the_page_content=True)
     text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
         embeddings.client.tokenizer,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
     texts = text_splitter.split_documents(documents)
-    texts = inject_metadata(texts)
+    metadatas = [text.metadata for text in texts]
+
+    if args.debug:
+        model_name = embeddings.model_name
+        tok_voc = {v: k for k, v in embeddings.client.tokenizer.vocab.items()}
+        dict_tokenization = []
+        # Not so pythonic loop but it keeps the Document class otherwise texts[i] becomes a tuple
+        for i in range(len(texts)):
+            tokenization = " ".join(
+                [
+                    tok_voc[x]
+                    for x in embeddings.client.tokenizer(texts[i].page_content)[
+                        "input_ids"
+                    ]
+                ]
+            )
+            dict_tokenization.append(
+                {f"{i}_{texts[0].metadata['source']}": tokenization}
+            )
+        with open(f"logs/debug_{model_name.split('/')[-1]}.json", "w") as f:
+            json.dump(
+                dict_tokenization,
+                f,
+                ensure_ascii=False,
+            )
+
+    # texts = inject_metadata(texts)
     print(f"Split into {len(texts)} chunks of text (max. {chunk_size} tokens each)")
-    return texts
+    return texts, metadatas
 
 
 def does_vectorstore_exist(persist_directory: str) -> bool:
@@ -192,12 +222,12 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
     return False
 
 
-def main():
+def main(args):
     # Create embeddings
     # embeddings = T5Embedder(model_name=embeddings_model_name)
     # embeddings = LlamaEmbedder(model_name=embeddings_model_name)
     embeddings = HuggingFaceInstructEmbeddings(model_name=embeddings_model_name)
-
+    embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
         print(f"Appending to existing vectorstore at {persist_directory}")
@@ -207,21 +237,24 @@ def main():
             client_settings=CHROMA_SETTINGS,
         )
         collection = db.get()
-        texts = process_documents(
-            embeddings, [metadata["source"] for metadata in collection["metadatas"]]
+        texts, _ = process_documents(
+            embeddings,
+            args=args,
+            ignored_files=[metadata["source"] for metadata in collection["metadatas"]],
         )
         print("Creating embeddings. May take some minutes...")
         db.add_documents(texts)
     else:
         # Create and store locally vectorstore
         print("Creating new vectorstore")
-        texts = process_documents(embeddings=embeddings)
+        texts, metadatas = process_documents(embeddings=embeddings, args=args)
         print("Creating embeddings. May take some minutes...")
         db = Chroma.from_documents(
             texts,
             embeddings,
             persist_directory=persist_directory,
             client_settings=CHROMA_SETTINGS,
+            metadatas=metadatas,
         )
     db.persist()
     db = None
@@ -230,4 +263,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Process documents for privateGPT ingestion"
+    )
+    parser.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        help="Set to True for debug mode",
+    )
+    args = parser.parse_args()
+
+    debug = args.debug
+    main(args)
