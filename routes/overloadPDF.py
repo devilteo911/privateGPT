@@ -11,6 +11,7 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from constants import PARAMS
 from fastapi import APIRouter
 from utils.utils import (
+    SimpleStreamlitCallbackHandler,
     load_llm_and_retriever,
     overwrite_llm_params,
     parse_arguments,
@@ -27,6 +28,21 @@ load_dotenv()
 router = APIRouter()
 args = parse_arguments()
 params = PARAMS.copy()
+
+
+@router.post("/simple_gen")
+def simple_gen(query: Query):
+    params.update(query.params)
+
+    ggml_model, _ = load_llm_and_retriever(
+        params,
+        callbacks=[StreamingStdOutCallbackHandler(), SimpleStreamlitCallbackHandler()],
+        rest=True,
+    )
+    ggml_model = overwrite_llm_params(ggml_model, params)
+
+    gen = ggml_model.generate(prompts=[query.query], max_length=1000)
+    return gen
 
 
 # @router.post("/overloadPDF")
