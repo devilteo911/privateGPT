@@ -37,8 +37,6 @@ load_dotenv()
 persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
-chunk_size = 300
-chunk_overlap = 0
 
 
 # Custom document loaders
@@ -167,8 +165,8 @@ def process_documents(
     # documents = add_metadata(documents, inject_in_the_page_content=True)
     text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
         embeddings.client.tokenizer,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
     )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
@@ -198,7 +196,9 @@ def process_documents(
             )
 
     # texts = inject_metadata(texts)
-    print(f"Split into {len(texts)} chunks of text (max. {chunk_size} tokens each)")
+    print(
+        f"Split into {len(texts)} chunks of text (max. {args.chunk_size} tokens each)"
+    )
     return texts, metadatas
 
 
@@ -272,6 +272,22 @@ if __name__ == "__main__":
         action="store_true",
         help="Set to True for debug mode",
     )
+
+    parser.add_argument(
+        "--chunk_size",
+        "-c",
+        type=int,
+        default=300,
+        help="Set the chunk size for the text splitter",
+    )
+    parser.add_argument(
+        "--chunk_overlap",
+        "-o",
+        type=int,
+        default=0,
+        help="Set the chunk overlap for the text splitter",
+    )
+
     args = parser.parse_args()
 
     debug = args.debug
