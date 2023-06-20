@@ -5,6 +5,7 @@ import glob
 from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
+from langchain import OpenAI
 from tqdm import tqdm
 from pathlib import Path
 import argparse
@@ -12,7 +13,7 @@ import argparse
 from langchain.document_loaders import (
     CSVLoader,
     EverNoteLoader,
-    PDFMinerLoader,
+    PDFPlumberLoader,
     TextLoader,
     UnstructuredEmailLoader,
     UnstructuredEPubLoader,
@@ -37,6 +38,8 @@ load_dotenv()
 persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
+openai_api_base = os.environ.get("OPENAI_API_BASE")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
 
 
 # Custom document loaders
@@ -74,7 +77,7 @@ LOADER_MAPPING = {
     ".html": (UnstructuredHTMLLoader, {}),
     ".md": (UnstructuredMarkdownLoader, {}),
     ".odt": (UnstructuredODTLoader, {}),
-    ".pdf": (PDFMinerLoader, {}),
+    ".pdf": (PDFPlumberLoader, {}),
     ".ppt": (UnstructuredPowerPointLoader, {}),
     ".pptx": (UnstructuredPowerPointLoader, {}),
     ".txt": (TextLoader, {"encoding": "utf8"}),
@@ -87,7 +90,7 @@ def load_single_document(file_path: str) -> List[Document]:
     if ext in LOADER_MAPPING:
         loader_class, loader_args = LOADER_MAPPING[ext]
         loader = loader_class(file_path, **loader_args)
-        return loader.load()
+        return loader.load_and_split()
 
     raise ValueError(f"Unsupported file extension '{ext}'")
 
@@ -160,9 +163,6 @@ def process_documents(
         print("No new documents to load")
         exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
-    # save_to_txt(documents)
-    # break
-    # documents = add_metadata(documents, inject_in_the_page_content=True)
     text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
         embeddings.client.tokenizer,
         chunk_size=args.chunk_size,
@@ -224,10 +224,9 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
 
 def main(args):
     # Create embeddings
-    # embeddings = T5Embedder(model_name=embeddings_model_name)
-    # embeddings = LlamaEmbedder(model_name=embeddings_model_name)
-    embeddings = HuggingFaceInstructEmbeddings(model_name=embeddings_model_name)
-    embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+    embeddings = HuggingFaceInstructEmbeddings(
+        model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
+    )
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
         print(f"Appending to existing vectorstore at {persist_directory}")
@@ -271,6 +270,13 @@ if __name__ == "__main__":
         "-d",
         action="store_true",
         help="Set to True for debug mode",
+    )
+
+    parser.add_argument(
+        "--rest",
+        "-r",
+        action="store_true",
+        help="Set to True for REST mode",
     )
 
     parser.add_argument(

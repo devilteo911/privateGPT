@@ -170,3 +170,5 @@ cython_debug/
 #.idea/
 source_documents/
 logs/
+other_docs/
+resources/

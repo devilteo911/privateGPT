@@ -139,7 +139,12 @@ def load_llm_and_retriever(
 
     logger.info(f"Current params: {params}")
 
-    embeddings = HuggingFaceInstructEmbeddings(model_name=params["embedding_model"])
+    model_kwargs = {"device": "cuda:1"}
+    embeddings = HuggingFaceInstructEmbeddings(
+        model_name=params["embedding_model"], model_kwargs=model_kwargs
+    )
+    # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+
     db = Chroma(
         persist_directory=os.environ.get("PERSIST_DIRECTORY"),
         embedding_function=embeddings,
