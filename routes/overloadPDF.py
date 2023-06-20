@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from pydantic import BaseModel
 from base import QALogger
-from constants import QUESTIONS
+from constants import QUESTIONS, QUESTIONS_MULTI_DOC
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
 
@@ -41,7 +41,7 @@ def simple_gen(query: Query):
     )
     ggml_model = overwrite_llm_params(ggml_model, params)
 
-    gen = ggml_model.generate(prompts=[query.query], max_length=1000)
+    gen = ggml_model.generate(prompts=[query.query])
     return gen
 
 
@@ -75,23 +75,25 @@ def inference(query: Query, callbacks):
 
 
 @router.post("/multiTest")
-def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler]):
+def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
     params.update(query.params)
-    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=False)
+    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
     llm = overwrite_llm_params(ggml_model, params)
     qa = select_retrieval_chain(llm, retriever, params)
 
     logs = QALogger(params)
     docs_to_return = []
+
+    questions = QUESTIONS + QUESTIONS_MULTI_DOC
     # Interactive questions and answers
     while True:
         try:
-            if len(QUESTIONS) == 0:
+            if len(questions) == 0:
                 logs.save_to_disk()
                 break
-            query = QUESTIONS[0]
+            query = questions[0]
             print("Auto Query: ", query)
-            QUESTIONS.pop(0)
+            questions.pop(0)
 
             # Get the answer from the chain
             res = qa(query + ". Answer in italian.")
@@ -106,8 +108,8 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler]):
 
             # Print the relevant sources used for the answer
             for document in docs:
-                print("\n> " + document.metadata["source"] + ":")
-                print(document.page_content)
+                #     print("\n> " + document.metadata["source"] + ":")
+                #     print(document.page_content)
                 docs_to_return.append(document.page_content)
         except KeyboardInterrupt:
             logs.save_to_disk()

@@ -49,24 +49,14 @@ QUESTION: {question}
 FINAL ANSWER IN ITALIAN:"""
 
 STUFF_TEMPLATE = """
-Use the following pieces of context to answer the question at the end. If you don't know 
+USER: Use the following pieces of context to answer the question at the end. If you don't know 
 the answer, just say that you don't know, don't try to make up an answer.
-
-In addition to giving an answer, also return a score of how fully it answered the user's 
-question. This should be in the following format:
-
-Question: [question here]
-Helpful Answer In Italian: [answer here]
-Score: [score between 0 and 100]
-
-Begin!
-
 Context:
 ---------
 {context}
 ---------
-Question: {question}
-Helpful Answer In Italian:"""
+Question: {question}  you must provide Helpful Answer in syntactically correct Italian!
+ASSISTANT:"""
 
 
 PARAMS = {
