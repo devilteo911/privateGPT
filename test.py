@@ -1,10 +1,9 @@
-from pathlib import Path
 import re
 import pandas as pd
 import requests
-import json
 from datetime import datetime
 from typing import List
+from tqdm.auto import tqdm
 
 
 def load_texts_from_bundle(path: str) -> List[str]:
@@ -32,14 +31,14 @@ def main(args):
     df = pd.DataFrame(columns=["question", "answer"])
     texts = load_texts_from_bundle(
         "resources/ResourceBundle_it.properties_1680512691959"
-    )[:2]
+    )
 
     template = """
     USER: Devi crearmi venti domande il più plausibili possibile per il seguente testo.
     Le venti domande devono attenersi fedelmente al testo. Ecco il testo: {}
     ASSISTANT:
     """
-    for text in texts:
+    for text in tqdm(texts):
         q = template.format(text)
 
         data = {
