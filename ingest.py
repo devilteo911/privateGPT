@@ -6,6 +6,7 @@ from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
 from langchain import OpenAI
+from loguru import logger
 from tqdm import tqdm
 from pathlib import Path
 import argparse
@@ -107,7 +108,6 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     filtered_files = [
         file_path for file_path in all_files if file_path not in ignored_files
     ]
-
     with Pool(processes=os.cpu_count()) as pool:
         results = []
         with tqdm(
@@ -186,7 +186,7 @@ def process_documents(
                 ]
             )
             dict_tokenization.append(
-                {f"{i}_{texts[0].metadata['source']}": tokenization}
+                {f"{i}_{texts[i].metadata['source']}": tokenization}
             )
         with open(f"logs/debug_{model_name.split('/')[-1]}.json", "w") as f:
             json.dump(
