@@ -14,7 +14,7 @@ import argparse
 from langchain.document_loaders import (
     CSVLoader,
     EverNoteLoader,
-    PDFPlumberLoader,
+    PyPDFLoader,
     TextLoader,
     UnstructuredEmailLoader,
     UnstructuredEPubLoader,
@@ -69,7 +69,6 @@ class MyElmLoader(UnstructuredEmailLoader):
 # Map file extensions to document loaders and their arguments
 LOADER_MAPPING = {
     ".csv": (CSVLoader, {}),
-    # ".docx": (Docx2txtLoader, {}),
     ".doc": (UnstructuredWordDocumentLoader, {}),
     ".docx": (UnstructuredWordDocumentLoader, {}),
     ".enex": (EverNoteLoader, {}),
@@ -78,7 +77,7 @@ LOADER_MAPPING = {
     ".html": (UnstructuredHTMLLoader, {}),
     ".md": (UnstructuredMarkdownLoader, {}),
     ".odt": (UnstructuredODTLoader, {}),
-    ".pdf": (PDFPlumberLoader, {}),
+    ".pdf": (PyPDFLoader, {}),
     ".ppt": (UnstructuredPowerPointLoader, {}),
     ".pptx": (UnstructuredPowerPointLoader, {}),
     ".txt": (TextLoader, {"encoding": "utf8"}),

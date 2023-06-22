@@ -92,11 +92,11 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
                 logs.save_to_disk()
                 break
             query = questions[0]
-            print("Auto Query: ", query)
+            print("\nAuto Query: ", query)
             questions.pop(0)
 
             # Get the answer from the chain
-            res = qa(query + ". Answer in italian.")
+            res = qa(query)
             answer, docs = (
                 res["result"],
                 [] if args.hide_source else res["source_documents"],

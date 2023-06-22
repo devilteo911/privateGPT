@@ -49,14 +49,17 @@ QUESTION: {question}
 FINAL ANSWER IN ITALIAN:"""
 
 STUFF_TEMPLATE = """
-USER: Use the following pieces of context to answer the question at the end. If you don't know 
+### Instruction: Use the following pieces of context to answer the question at the end. If you don't know 
 the answer, just say that you don't know, don't try to make up an answer.
+
 Context:
 ---------
 {context}
 ---------
-Question: {question}  you must provide Helpful Answer in syntactically correct Italian!
-ASSISTANT:"""
+
+Question: {question}.  You MUST provide an helpful answer in syntactically correct Italian!
+
+### Assistant:"""
 
 
 PARAMS = {
