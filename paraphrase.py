@@ -1,8 +1,10 @@
 from datetime import datetime
 import json
 import re
+import pandas as pd
 import requests
 from tqdm.auto import tqdm
+from test import load_texts_from_bundle
 
 
 def main(args):
@@ -11,11 +13,19 @@ def main(args):
     You must reply in italian. Here it is the italian text: {}
     ASSISTANT:
     """
+    keys = load_texts_from_bundle(
+        "resources/ResourceBundle_it.properties_1680512691959", mode="keys"
+    )
+
     # load the json from the resources folder
     with open("logs/domande_jurij.json", "r") as f:
         data = json.load(f)
 
-    for d in tqdm(data):
+    df = pd.DataFrame(columns=["keys", "question", "answer", "paraphrases"])
+
+    for i, d in tqdm(enumerate(data)):
+        if i == 2:
+            break
         _, answers = d["question"], d["answer"]
         paraphrases = []
         for answer in tqdm(answers):
@@ -39,11 +49,20 @@ def main(args):
 
             else:
                 print(response.status_code)
-
+        d["keys"] = keys[i]
         d["paraphrases"] = paraphrases
-        break
-    with open(args["filename"], "w") as f:
-        json.dump(d, f, indent=4)
+
+        # reoreder the keys of the dict
+        d = {
+            "keys": d["keys"],
+            "question": d["question"],
+            "answer": d["answer"],
+            "paraphrases": d["paraphrases"],
+        }
+
+        df = df.append(d, ignore_index=True)
+
+    df.to_json(args["filename"], orient="records", force_ascii=False)
 
 
 if __name__ == "__main__":
