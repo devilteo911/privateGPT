@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import shutil
 import os
 import glob
 from typing import List
@@ -90,7 +91,7 @@ def load_single_document(file_path: str) -> List[Document]:
     if ext in LOADER_MAPPING:
         loader_class, loader_args = LOADER_MAPPING[ext]
         loader = loader_class(file_path, **loader_args)
-        return loader.load_and_split()
+        return loader.load()
 
     raise ValueError(f"Unsupported file extension '{ext}'")
 
@@ -166,6 +167,7 @@ def process_documents(
         embeddings.client.tokenizer,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
+        separators=["\n\n\n"],
     )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
@@ -222,6 +224,9 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
 
 
 def main(args):
+    logger.info("Removing old vectorstore if exists")
+    if os.path.exists("db"):
+        shutil.rmtree("db")
     # Create embeddings
     embeddings = HuggingFaceInstructEmbeddings(
         model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}

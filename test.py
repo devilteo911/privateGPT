@@ -6,7 +6,7 @@ from typing import List
 from tqdm.auto import tqdm
 
 
-def load_texts_from_bundle(path: str) -> List[str]:
+def load_texts_from_bundle(path: str, mode: str = "texts") -> List[str]:
     """
     Loads the texts from a ResourceBundle file and returns a list of strings
     containing the sentences.
@@ -22,8 +22,12 @@ def load_texts_from_bundle(path: str) -> List[str]:
     texts: List[str] = []
     for line in lines:
         if "=" in line:
-            text: str = line.split("=")[-1].strip().replace("\\n", " ")
-            texts.append(text)
+            if mode == "texts":
+                text: str = line.split("=")[-1].strip().replace("\\n", " ")
+                texts.append(text)
+            else:  # I take only the keys
+                text: str = line.split("=")[0].strip().replace("\\n", " ")
+                texts.append(text)
     return texts
 
 

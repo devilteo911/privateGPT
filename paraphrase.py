@@ -24,8 +24,6 @@ def main(args):
     df = pd.DataFrame(columns=["keys", "question", "answer", "paraphrases"])
 
     for i, d in tqdm(enumerate(data)):
-        if i == 2:
-            break
         _, answers = d["question"], d["answer"]
         paraphrases = []
         for answer in tqdm(answers):
