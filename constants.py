@@ -49,8 +49,9 @@ QUESTION: {question}
 FINAL ANSWER IN ITALIAN:"""
 
 STUFF_TEMPLATE = """
-### Instruction: Use the following pieces of context to answer the question at the end. If you don't know 
-the answer, just say that you don't know, don't try to make up an answer.
+###Instruction: Use the following pieces of context to answer the question at the end. If you don't know 
+the answer, just say that you don't know, don't try to make up an answer. The text you will find in the context
+will have all the information you need to answer the question.
 
 Context:
 ---------
@@ -59,7 +60,7 @@ Context:
 
 Question: {question}.  You MUST provide an helpful answer in syntactically correct Italian!
 
-### Assistant:"""
+### Response:"""
 
 
 PARAMS = {

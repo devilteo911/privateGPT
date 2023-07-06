@@ -65,4 +65,4 @@ class QALogger:
         qa_json = self.df.to_dict(orient="records")
         self.params["qa"] = qa_json
         with open(self.filename, "w") as f:
-            json.dump(self.params, f)
+            json.dump(self.params, f, ensure_ascii=False)
