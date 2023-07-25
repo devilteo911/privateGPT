@@ -29,7 +29,7 @@ from langchain.document_loaders import (
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.docstore.document import Document
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 from constants import CHROMA_SETTINGS
 
 
@@ -167,7 +167,7 @@ def process_documents(
         embeddings.client.tokenizer,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
-        separators=["\n\n\n"],
+        separators=["\n"],
     )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
@@ -224,11 +224,12 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
 
 
 def main(args):
-    logger.info("Removing old vectorstore if exists")
-    if os.path.exists("db"):
-        shutil.rmtree("db")
+    if args.debug:
+        logger.info("Removing old vectorstore if exists")
+        if os.path.exists("db"):
+            shutil.rmtree("db")
     # Create embeddings
-    embeddings = HuggingFaceInstructEmbeddings(
+    embeddings = HuggingFaceEmbeddings(
         model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
     )
     if does_vectorstore_exist(persist_directory):
