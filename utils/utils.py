@@ -8,12 +8,14 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.llms import CTransformers, GPT4All, LlamaCpp
 from langchain.llms.base import LLM
 from langchain.vectorstores import Chroma
 from langchain.vectorstores.base import VectorStore
+import langchain
 from langchain.llms import OpenAI
+from dotenv import load_dotenv
 
 from loguru import logger
 import streamlit as st
@@ -24,8 +26,14 @@ from constants import (
     QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
-
 from langchain.output_parsers import RegexParser
+
+langchain.verbose = True
+
+load_dotenv()
+openai_api_key_emb = os.environ.get("OPENAI_API_KEY")
+openai_api_key_mock = os.environ.get("OPENAI_API_KEY_MOCK")
+openai_api_base_mock = os.environ.get("OPENAI_API_BASE_MOCK")
 
 
 class SimpleStreamlitCallbackHandler(BaseCallbackHandler):
@@ -58,6 +66,8 @@ def initialize_llm(params, callbacks, rest=False):
             top_p=params["top_p"],
             streaming=True,
             callbacks=callbacks,
+            # openai_api_key=openai_api_key_mock,
+            # openai_api_base=openai_api_base_mock,
         )
     else:
         # Prepare the LLM
@@ -140,9 +150,14 @@ def load_llm_and_retriever(
     logger.info(f"Current params: {params}")
 
     model_kwargs = {"device": "cuda:1"}
-    embeddings = HuggingFaceInstructEmbeddings(
-        model_name=params["embedding_model"], model_kwargs=model_kwargs
-    )
+    if params["remote"]:
+        logger.info("Using OpenAI embeddings")
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
+    else:
+        logger.info("Using HuggingFace embeddings")
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=params["embedding_model"], model_kwargs=model_kwargs
+        )
     # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     db = Chroma(
@@ -197,6 +212,7 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                 input_variables=["context", "question"],
                 output_parser=output_parser,
             )
+
             chain_type_kwargs = {"prompt": STUFF_PROMPT}
             qa = RetrievalQA.from_chain_type(
                 llm=llm,

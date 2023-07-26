@@ -29,7 +29,7 @@ from langchain.document_loaders import (
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.docstore.document import Document
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from constants import CHROMA_SETTINGS
 
 
@@ -41,7 +41,8 @@ persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
 openai_api_base = os.environ.get("OPENAI_API_BASE")
-openai_api_key = os.environ.get("OPENAI_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY_MOCK")
+openai_api_key_emb = os.environ.get("OPENAI_API_KEY")
 
 
 # Custom document loaders
@@ -163,11 +164,15 @@ def process_documents(
         print("No new documents to load")
         exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
-    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        embeddings.client.tokenizer,
+    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+    #     embeddings.client.tokenizer,
+    #     chunk_size=args.chunk_size,
+    #     chunk_overlap=args.chunk_overlap,
+    #     separators=["\n"],
+    # )
+    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
-        separators=["\n"],
     )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
@@ -229,9 +234,12 @@ def main(args):
         if os.path.exists("db"):
             shutil.rmtree("db")
     # Create embeddings
-    embeddings = HuggingFaceEmbeddings(
-        model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
-    )
+    if not args.rest:
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
+        )
+    else:
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
         print(f"Appending to existing vectorstore at {persist_directory}")
