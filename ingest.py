@@ -164,20 +164,22 @@ def process_documents(
         print("No new documents to load")
         exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
-    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-    #     embeddings.client.tokenizer,
-    #     chunk_size=args.chunk_size,
-    #     chunk_overlap=args.chunk_overlap,
-    #     separators=["\n"],
-    # )
-    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
-    )
+    if not args.rest:
+        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            embeddings.client.tokenizer,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            separators=["\n"],
+        )
+    else:
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+        )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
 
-    if args.debug:
+    if args.debug and not args.rest:
         model_name = embeddings.model_name
         tok_voc = {v: k for k, v in embeddings.client.tokenizer.vocab.items()}
         dict_tokenization = []
