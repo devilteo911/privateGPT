@@ -61,14 +61,19 @@ def initialize_llm(params, callbacks, rest=False):
         langchain.llms.base.LLM: The initialized LLM object.
     """
     if rest:
-        return OpenAI(
-            temperature=params["temperature"],
-            top_p=params["top_p"],
-            streaming=True,
-            callbacks=callbacks,
-            # openai_api_key=openai_api_key_mock,
-            # openai_api_base=openai_api_base_mock,
-        )
+        openai_params = {
+            "temperature": params["temperature"],
+            "top_p": params["top_p"],
+            "streaming": True,
+            "callbacks": callbacks,
+        }
+        if params["remote_model"]:
+            return OpenAI(**openai_params)
+        else:
+            # this call a local model that can output in chatgpt format
+            openai_params["openai_api_key"] = openai_api_key_mock
+            openai_params["openai_api_base"] = openai_api_base_mock
+            return OpenAI(**openai_params)
     else:
         # Prepare the LLM
         match params["model_type"]:
@@ -150,7 +155,7 @@ def load_llm_and_retriever(
     logger.info(f"Current params: {params}")
 
     model_kwargs = {"device": "cuda:1"}
-    if params["remote"]:
+    if params["remote_emb"]:
         logger.info("Using OpenAI embeddings")
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
     else:

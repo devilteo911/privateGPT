@@ -26,11 +26,17 @@ temperature = st.sidebar.slider("Temperature", 0.0, 1.0, 0.5, 0.1)
 top_k = st.sidebar.slider("Top K", 1, 100, 10, 1)
 top_p = st.sidebar.slider("Top P", 0.0, 1.0, 0.9, 0.1)
 repeat_penalty = st.sidebar.slider("Repeat Penalty", 1.0, 2.0, 1.2, 0.1)
-remote = st.sidebar.checkbox("Remote")
+remote_emb = st.sidebar.checkbox("Remote Embeddings")
+remote_model = st.sidebar.checkbox("Remote Model")
 reload_db = st.sidebar.button("Reload DB")
 
 
-params = {"temperature": temperature, "top_p": top_p, "remote": remote}
+params = {
+    "temperature": temperature,
+    "top_p": top_p,
+    "remote_emb": remote_emb,
+    "remote_model": remote_model,
+}
 
 # Main content"
 st.title("⚡ Overload PDF Chat 🤖")
