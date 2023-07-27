@@ -3,18 +3,14 @@ import shutil
 from fastapi import Query
 import requests
 import streamlit as st
+from ingest import LOADER_MAPPING
 from routes.overloadPDF import inference
-from utils.utils import SimpleStreamlitCallbackHandler
-from ingest import LOADER_MAPPING, main as ingest_docs
+from utils.utils import FakeArgs, SimpleStreamlitCallbackHandler
 from io import StringIO
 import sys
 
 
 # st.set_page_config(page_title="Overload PDF Chat", layout="wide")
-class FakeArgs:
-    chunk_size = 450
-    chunk_overlap = 50
-    debug = False
 
 
 # Sidebar
@@ -28,7 +24,6 @@ top_p = st.sidebar.slider("Top P", 0.0, 1.0, 0.9, 0.1)
 repeat_penalty = st.sidebar.slider("Repeat Penalty", 1.0, 2.0, 1.2, 0.1)
 remote_emb = st.sidebar.checkbox("Remote Embeddings")
 remote_model = st.sidebar.checkbox("Remote Model")
-reload_db = st.sidebar.button("Reload DB")
 
 
 params = {
@@ -53,9 +48,10 @@ if st.button("Upload"):
         bytes_data = uploaded_file.read()
         with open(f"source_documents/{uploaded_file.name}", "wb") as f:
             f.write(bytes_data)
-        if i == total_docs - 1:
-            args = FakeArgs()
-            ingest_docs(args)
+        # if i == total_docs - 1:
+        #     pass
+        # args = FakeArgs()
+        # ingest_docs(args)
 
 query = st.text_input("Enter your question here")
 if st.button("Get Answer"):
@@ -70,9 +66,3 @@ if st.button("Get Answer"):
         # Find the relevant pages
         # Write out the first
         st.write(res["docs"])
-
-
-if reload_db:
-    # remove the current db folder
-    shutil.rmtree("db")
-    ingest_docs()

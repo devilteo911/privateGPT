@@ -12,6 +12,7 @@ from constants import PARAMS
 from fastapi import APIRouter
 from utils.utils import (
     SimpleStreamlitCallbackHandler,
+    check_stored_embeddings,
     load_llm_and_retriever,
     overwrite_llm_params,
     parse_arguments,
@@ -48,6 +49,8 @@ def simple_gen(query: Query):
 # @router.post("/overloadPDF")
 def inference(query: Query, callbacks):
     params.update(query["params"])
+
+    check_stored_embeddings(params)
 
     ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
     ggml_model = overwrite_llm_params(ggml_model, params)
@@ -115,3 +118,12 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
             logs.save_to_disk()
             sys.exit()
     return "DONE"
+
+
+@router.post("/simpleChat")
+def simple_chat(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
+    params.update(query.params)
+    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
+    llm = overwrite_llm_params(ggml_model, params)
+    out = llm.generate(prompts=[query.query]).generations[0][0].text
+    return out
