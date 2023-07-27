@@ -3,6 +3,7 @@ import json
 import shutil
 import os
 import glob
+import time
 from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
@@ -109,17 +110,14 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     filtered_files = [
         file_path for file_path in all_files if file_path not in ignored_files
     ]
-    with Pool(processes=os.cpu_count()) as pool:
-        results = []
-        with tqdm(
-            total=len(filtered_files), desc="Loading new documents", ncols=80
-        ) as pbar:
-            for i, docs in enumerate(
-                pool.imap_unordered(load_single_document, filtered_files)
-            ):
-                results.extend(docs)
-                pbar.update()
-
+    results = []
+    with tqdm(
+        total=len(filtered_files), desc="Loading new documents", ncols=80
+    ) as pbar:
+        for file_path in filtered_files:
+            docs = load_single_document(file_path)
+            results.extend(docs)
+            pbar.update()
     return results
 
 
@@ -162,7 +160,6 @@ def process_documents(
     documents = load_documents(source_directory, ignored_files)
     if not documents:
         print("No new documents to load")
-        exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
     if not args.rest:
         text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
