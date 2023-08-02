@@ -77,6 +77,7 @@ def initialize_llm(params, callbacks, rest=False):
         openai_params = {
             "temperature": params["temperature"],
             "top_p": params["top_p"],
+            "max_tokens": params["max_tokens_field"],
             "streaming": True,
             "callbacks": callbacks,
         }
