@@ -258,16 +258,14 @@ def main(args):
     else:
         # Create and store locally vectorstore
         print("Creating new vectorstore")
-        texts, metadatas = process_documents(embeddings=embeddings, args=args)
+        texts, _ = process_documents(embeddings=embeddings, args=args)
         print("Creating embeddings. May take some minutes...")
         db = Chroma.from_documents(
             texts,
             embeddings,
             persist_directory=persist_directory,
             client_settings=CHROMA_SETTINGS,
-            metadatas=metadatas,
         )
-    db.persist()
     db = None
 
     print("Ingestion complete! You can now run privateGPT.py to query your documents")
