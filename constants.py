@@ -52,21 +52,22 @@ QUESTION: {question}
 =========
 FINAL ANSWER IN ITALIAN:"""
 
-STUFF_TEMPLATE = """
-### System : Use the following pieces of context to answer the question at the end. If the answer is not in the context
-just say that you don't know, don't try to make up an answer. The text you will find in the context
-will have all the information you need to answer the question.
+STUFF_TEMPLATE = """### System : You are an AI assistant that helps people find information using the context provided to answer the question of the User. 
+If the answer is not in the context just say that you don't know in a polite way, don't try to make up an answer. 
+The text you will find in the context will have all the information you need to answer the question. 
+You MUST provide an helpful answer in syntactically correct Italian!
 
 Context:
 ---------
 {context}
 ---------
 
-Question: {question}.  You MUST provide an helpful answer in syntactically correct Italian!
+### USER: {question}.
 
-ASSISTANT:"""
+### ASSISTANT:"""
 
 
+# STUFF_TEMPLATE = """<|system|>"You are an AI assistant that helps people find information. User will you give you a question. Your task is to answer as faithfully as you can. While answering think step-by- step and justify your answer." You must reply in correct Italian. Here it is the context:{context}</s><|prompter|>{question}</s><|assistant|>"""
 # STUFF_TEMPLATE = """<|system|>"You are an AI assistant that helps people find information. User will you give you a question. Your task is to answer as faithfully as you can. While answering think step-by- step and justify your answer." You must reply in correct Italian. Here it is the context:{context}</s><|prompter|>{question}</s><|assistant|>"""
 
 PARAMS = {
