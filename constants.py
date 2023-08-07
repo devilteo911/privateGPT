@@ -79,6 +79,7 @@ PARAMS = {
     "qa": [],
     "temperature": 0.0,
     "max_tokens_field": 512,
+    "paragraph_overlap": 0,
     "top_k": 50,
     "top_p": 0.9,
     "repeat_penalty": 1.2,

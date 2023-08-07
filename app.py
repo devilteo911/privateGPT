@@ -10,11 +10,13 @@ st.sidebar.title("Menu")
 remote_emb = st.sidebar.checkbox("Remote Embeddings")
 remote_model = st.sidebar.checkbox("Remote Model")
 max_tokens = st.sidebar.slider("Max Tokens", 128, 4096, 128)
+paragraph_overlap = st.sidebar.selectbox("Paragraph Overlap", [0, 1, 2])
 
 params = {
     "remote_emb": remote_emb,
     "remote_model": remote_model,
     "max_tokens_field": max_tokens,
+    "paragraph_overlap": paragraph_overlap,
 }
 
 # Main content
