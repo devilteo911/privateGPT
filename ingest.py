@@ -3,6 +3,7 @@ import json
 import shutil
 import os
 import glob
+import time
 from typing import List
 from dotenv import load_dotenv
 from multiprocessing import Pool
@@ -29,7 +30,7 @@ from langchain.document_loaders import (
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
 from langchain.docstore.document import Document
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from constants import CHROMA_SETTINGS
 
 
@@ -41,7 +42,8 @@ persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
 openai_api_base = os.environ.get("OPENAI_API_BASE")
-openai_api_key = os.environ.get("OPENAI_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY_MOCK")
+openai_api_key_emb = os.environ.get("OPENAI_API_KEY")
 
 
 # Custom document loaders
@@ -108,17 +110,14 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     filtered_files = [
         file_path for file_path in all_files if file_path not in ignored_files
     ]
-    with Pool(processes=os.cpu_count()) as pool:
-        results = []
-        with tqdm(
-            total=len(filtered_files), desc="Loading new documents", ncols=80
-        ) as pbar:
-            for i, docs in enumerate(
-                pool.imap_unordered(load_single_document, filtered_files)
-            ):
-                results.extend(docs)
-                pbar.update()
-
+    results = []
+    with tqdm(
+        total=len(filtered_files), desc="Loading new documents", ncols=80
+    ) as pbar:
+        for file_path in filtered_files:
+            docs = load_single_document(file_path)
+            results.extend(docs)
+            pbar.update()
     return results
 
 
@@ -161,18 +160,23 @@ def process_documents(
     documents = load_documents(source_directory, ignored_files)
     if not documents:
         print("No new documents to load")
-        exit(0)
     print(f"Loaded {len(documents)} new documents from {source_directory}")
-    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        embeddings.client.tokenizer,
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
-        separators=["\n\n\n"],
-    )
+    if not args.rest:
+        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            embeddings.client.tokenizer,
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+            separators=["\n"],
+        )
+    else:
+        text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
+            chunk_size=args.chunk_size,
+            chunk_overlap=args.chunk_overlap,
+        )
     texts = text_splitter.split_documents(documents)
     metadatas = [text.metadata for text in texts]
 
-    if args.debug:
+    if args.debug and not args.rest:
         model_name = embeddings.model_name
         tok_voc = {v: k for k, v in embeddings.client.tokenizer.vocab.items()}
         dict_tokenization = []
@@ -224,13 +228,17 @@ def does_vectorstore_exist(persist_directory: str) -> bool:
 
 
 def main(args):
-    logger.info("Removing old vectorstore if exists")
-    if os.path.exists("db"):
-        shutil.rmtree("db")
+    if args.debug:
+        logger.info("Removing old vectorstore if exists")
+        if os.path.exists("db"):
+            shutil.rmtree("db")
     # Create embeddings
-    embeddings = HuggingFaceInstructEmbeddings(
-        model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
-    )
+    if not args.rest:
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
+        )
+    else:
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
         print(f"Appending to existing vectorstore at {persist_directory}")

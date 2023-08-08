@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 from typing import Any, Dict, Tuple
 
 from fastapi.responses import StreamingResponse
@@ -8,12 +9,17 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.llms import CTransformers, GPT4All, LlamaCpp
 from langchain.llms.base import LLM
 from langchain.vectorstores import Chroma
 from langchain.vectorstores.base import VectorStore
+import langchain
 from langchain.llms import OpenAI
+from dotenv import load_dotenv
+from ingest import main as ingest_docs
+from pathlib import Path
+from langchain.chat_models import ChatOpenAI
 
 from loguru import logger
 import streamlit as st
@@ -24,8 +30,23 @@ from constants import (
     QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
-
 from langchain.output_parsers import RegexParser
+from dataclasses import dataclass
+
+langchain.verbose = True
+
+load_dotenv()
+openai_api_key_emb = os.environ.get("OPENAI_API_KEY")
+openai_api_key_mock = os.environ.get("OPENAI_API_KEY_MOCK")
+openai_api_base_mock = os.environ.get("OPENAI_API_BASE_MOCK")
+
+
+@dataclass
+class FakeArgs:
+    chunk_size: int
+    chunk_overlap: int
+    debug: bool = False
+    rest: bool = False
 
 
 class SimpleStreamlitCallbackHandler(BaseCallbackHandler):
@@ -53,12 +74,22 @@ def initialize_llm(params, callbacks, rest=False):
         langchain.llms.base.LLM: The initialized LLM object.
     """
     if rest:
-        return OpenAI(
-            temperature=params["temperature"],
-            top_p=params["top_p"],
-            streaming=True,
-            callbacks=callbacks,
-        )
+        openai_params = {
+            "temperature": params["temperature"],
+            "top_p": params["top_p"],
+            "max_tokens": params["max_tokens_field"],
+            "streaming": True,
+            "callbacks": callbacks,
+        }
+        if params["remote_model"]:
+            openai_params["model_name"] = "gpt-3.5-turbo"
+            openai_params.pop("top_p")
+            return ChatOpenAI(**openai_params)
+        else:
+            # this call a local model that can output in chatgpt format
+            openai_params["openai_api_key"] = openai_api_key_mock
+            openai_params["openai_api_base"] = openai_api_base_mock
+            return OpenAI(**openai_params)
     else:
         # Prepare the LLM
         match params["model_type"]:
@@ -115,10 +146,10 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
     Returns:
         langchain.llms.base.LLM: The modified LLM object.
     """
-    logger.info(f"Before: {llm.temperature, llm.top_p}")
+    # logger.info(f"Before: {llm.temperature, llm.top_p}")
     llm.temperature = params["temperature"]
-    llm.top_p = params["top_p"]
-    logger.info(f"After: {llm.temperature, llm.top_p}")
+    # llm.top_p = params["top_p"]
+    # logger.info(f"After: {llm.temperature, llm.top_p}")
 
     return llm
 
@@ -140,9 +171,14 @@ def load_llm_and_retriever(
     logger.info(f"Current params: {params}")
 
     model_kwargs = {"device": "cuda:1"}
-    embeddings = HuggingFaceInstructEmbeddings(
-        model_name=params["embedding_model"], model_kwargs=model_kwargs
-    )
+    if params["remote_emb"]:
+        logger.info("Using OpenAI embeddings")
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
+    else:
+        logger.info("Using HuggingFace embeddings")
+        embeddings = HuggingFaceInstructEmbeddings(
+            model_name=params["embedding_model"], model_kwargs=model_kwargs
+        )
     # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     db = Chroma(
@@ -197,6 +233,7 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                 input_variables=["context", "question"],
                 output_parser=output_parser,
             )
+
             chain_type_kwargs = {"prompt": STUFF_PROMPT}
             qa = RetrievalQA.from_chain_type(
                 llm=llm,
@@ -209,6 +246,34 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
             print(f"Chain type {params['chain_type']} not supported!")
             exit
     return qa
+
+
+def check_stored_embeddings(params: dict):
+    """
+    Checks if stored embeddings exist and updates them if necessary. If we choose to use
+    remote embeddings, we delete the local embeddings and update them with the remote
+    ones and vice versa.
+
+    Args:
+        params (dict): A dictionary containing parameters for the embeddings.
+
+    Returns:
+        None
+    """
+    logger.info(f"{'REMOTE' if params['remote_emb'] else 'LOCAL'} embeddings selected.")
+    emb_type = "remote" if params["remote_emb"] else "local"
+    emb_saved_type = f"db/{emb_type}_emb.dummy"
+    if not os.path.exists(emb_saved_type):
+        shutil.rmtree("db", ignore_errors=True)
+        chunk_size = 1500 if params["remote_emb"] else 450
+        args = FakeArgs(
+            chunk_size=chunk_size,
+            chunk_overlap=0,
+            debug=False,
+            rest=params["remote_emb"],
+        )
+        ingest_docs(args)
+        Path(emb_saved_type).touch()
 
 
 def parse_arguments():

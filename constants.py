@@ -14,22 +14,26 @@ CHROMA_SETTINGS = Settings(
     anonymized_telemetry=False,
 )
 
-QUESTIONS = [
-    "che documenti devo presentare per il rimborso?",
-    "come faccio a richiedere la prestazione?",
-    "quanto pago in una struttura non convenzionata",
-    "qaunto pago per i ticket?",
-    "che massimali ho?",
-    "che modalita' di prestazioni sono previste?",
-    "Quanto pago per in caso di utilizzo dei ticket?",
-    "Quali sono le strutture convenzionate con il Network Previmedical per effettuare le prestazioni in forma diretta?",
-]
+# QUESTIONS = [
+#     "che documenti devo presentare per il rimborso?",
+#     "come faccio a richiedere la prestazione?",
+#     "quanto pago in una struttura non convenzionata",
+#     "qaunto pago per i ticket?",
+#     "che massimali ho?",
+#     "che modalita' di prestazioni sono previste?",
+#     "Quanto pago per in caso di utilizzo dei ticket?",
+#     "Quali sono le strutture convenzionate con il Network Previmedical per effettuare le prestazioni in forma diretta?",
+# ]
 
-QUESTIONS_MULTI_DOC = [
-    "Quali sono i massimali di tutte le polizze?",
-    "Qual è il massimale per la polizza base p?",
-    "Qual è la quota a carico dell'assicurazione?",
-]
+# QUESTIONS_MULTI_DOC = [
+#     "Quali sono i massimali di tutte le polizze?",
+#     "Qual è il massimale per la polizza base p?",
+#     "Qual è la quota a carico dell'assicurazione?",
+# ]
+
+QUESTIONS = []
+
+QUESTIONS_MULTI_DOC = []
 
 QUESTION_TEMPLATE = """Use the following portion of a long document to see if any of the text is relevant to answer the question. 
 Return any relevant text in Italian.
@@ -49,8 +53,8 @@ QUESTION: {question}
 FINAL ANSWER IN ITALIAN:"""
 
 STUFF_TEMPLATE = """
-###Instruction: Use the following pieces of context to answer the question at the end. If you don't know 
-the answer, just say that you don't know, don't try to make up an answer. The text you will find in the context
+### System : Use the following pieces of context to answer the question at the end. If the answer is not in the context
+just say that you don't know, don't try to make up an answer. The text you will find in the context
 will have all the information you need to answer the question.
 
 Context:
@@ -60,8 +64,10 @@ Context:
 
 Question: {question}.  You MUST provide an helpful answer in syntactically correct Italian!
 
-### Response:"""
+ASSISTANT:"""
 
+
+# STUFF_TEMPLATE = """<|system|>"You are an AI assistant that helps people find information. User will you give you a question. Your task is to answer as faithfully as you can. While answering think step-by- step and justify your answer." You must reply in correct Italian. Here it is the context:{context}</s><|prompter|>{question}</s><|assistant|>"""
 
 PARAMS = {
     "model_path": os.environ.get("MODEL_PATH"),
@@ -70,9 +76,12 @@ PARAMS = {
     "model_n_ctx": os.environ.get("MODEL_N_CTX"),
     "target_source_chunks": int(os.environ.get("TARGET_SOURCE_CHUNKS", 4)),
     "qa": [],
-    "temperature": 0.2,
+    "temperature": 0.0,
+    "max_tokens_field": 512,
     "top_k": 50,
-    "top_p": 0.2,
+    "top_p": 0.9,
     "repeat_penalty": 1.2,
     "chain_type": "stuff",
+    "remote_emb": False,
+    "remote_model": False,
 }
