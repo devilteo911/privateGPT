@@ -180,7 +180,9 @@ def load_llm_and_retriever(
     else:
         logger.info("Using HuggingFace embeddings")
         embeddings = HuggingFaceInstructEmbeddings(
-            model_name=params["embedding_model"], model_kwargs=model_kwargs
+            model_name=params["embedding_model"],
+            model_kwargs=model_kwargs,
+            query_instruction="Represent this sentence for searching relevant passages:",
         )
     # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
@@ -323,11 +325,8 @@ def retrieve_document_neighborhood(
         candidate_docs_id = [doc.metadata["id"] for doc in candidate_docs]
 
         # adding the overlap neighborhood ids
-        candidate_docs_id = list(
-            chain.from_iterable(
-                range(num - overlap, num + overlap + 1) for num in candidate_docs_id
-            )
-        )
+
+        candidate_docs_id = add_prev_next(candidate_docs_id, all_docs_and_metas)
 
         docs = [
             all_docs_and_metas[k] for k in candidate_docs_id if k in all_docs_and_metas
@@ -346,9 +345,41 @@ def retrieve_document_neighborhood(
     return candidate_docs
 
 
+def add_prev_next(mylist: List[int], all_docs: List[Document]) -> List[int]:
+    """
+    Given a list of indices `mylist` and a list of all documents `all_docs`, returns a new list
+    containing the indices of the previous and next documents for each index in `mylist`. If an index
+    is at the beginning or end of `all_docs`, the previous or next index will wrap around to the
+    opposite end of the list.
+
+    Args:
+        mylist (List[int]): A list of indices.
+        all_docs (List[Document]): A list of all documents.
+
+    Returns:
+        List[int]: A new list containing the indices of the previous and next documents for each index
+        in `mylist`.
+    """
+    output = []
+    for i in mylist:
+        if i == 0:
+            # Underflow - add next 2
+            output.extend([i, i + 1, i + 2])
+        elif i == len(all_docs):
+            # Overflow - add prev 2
+            output.extend([i - 2, i - 1, i])
+        else:
+            prev = i - 1 if i > 0 else len(all_docs) - 1
+            next = i + 1 if i < len(all_docs) - 1 else 0
+            output.extend([prev, i, next])
+
+    # FIXME: the list gets reordered, is this something we want?
+    return list(set(output))
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="privateGPT: Ask questions to your documents without an internet connection, "
+        description="OverloadChat: Ask questions to your documents without an internet connection, "
         "using the power of LLMs."
     )
     parser.add_argument(

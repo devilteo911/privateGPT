@@ -237,7 +237,9 @@ def main(args):
     # Create embeddings
     if not args.rest:
         embeddings = HuggingFaceInstructEmbeddings(
-            model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
+            model_name=embeddings_model_name,
+            model_kwargs={"device": "cuda:1"},
+            query_instruction="Represent this sentence for searching relevant passages:",
         )
     else:
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)

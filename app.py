@@ -9,7 +9,7 @@ st.sidebar.title("Menu")
 # Add sliders to sidebar
 remote_emb = st.sidebar.checkbox("Remote Embeddings")
 remote_model = st.sidebar.checkbox("Remote Model")
-max_tokens = st.sidebar.slider("Max Tokens", 128, 4096, 128)
+max_tokens = st.sidebar.slider("Max Tokens", 128, 4096, step=128)
 paragraph_overlap = st.sidebar.selectbox("Paragraph Overlap", [0, 1, 2])
 
 params = {
