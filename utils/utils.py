@@ -179,10 +179,12 @@ def load_llm_and_retriever(
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
     else:
         logger.info("Using HuggingFace embeddings")
+        encode_kwargs = {"normalize_embeddings": True}
         embeddings = HuggingFaceInstructEmbeddings(
             model_name=params["embedding_model"],
             model_kwargs=model_kwargs,
             query_instruction="Represent this sentence for searching relevant passages:",
+            encode_kwargs=encode_kwargs,
         )
     # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 

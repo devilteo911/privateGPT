@@ -236,10 +236,12 @@ def main(args):
             shutil.rmtree("db")
     # Create embeddings
     if not args.rest:
+        encode_kwargs = {"normalize_embeddings": True}
         embeddings = HuggingFaceInstructEmbeddings(
             model_name=embeddings_model_name,
             model_kwargs={"device": "cuda:1"},
             query_instruction="Represent this sentence for searching relevant passages:",
+            encode_kwargs=encode_kwargs,
         )
     else:
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
