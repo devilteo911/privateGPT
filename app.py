@@ -39,15 +39,39 @@ if st.button("Upload"):
         # args = FakeArgs()
         # ingest_docs(args)
 
-query = st.text_input("Enter your question here")
-if st.button("Get Answer"):
-    with st.spinner("typing..."):
-        res = inference(
-            {"query": query, "params": params},
-            callbacks=[SimpleStreamlitCallbackHandler()],
-        )
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    with st.expander("Document Similarity Search"):
-        # Find the relevant pages
-        # Write out the first
-        st.write(res["docs"])
+# Display chat messages from history on app rerun
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Accept user input
+if prompt := st.chat_input("Write your question here..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Display user message in chat message container
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    # Display assistant response in chat message container
+    assistant = st.chat_message("assistant")
+    full_response = inference(
+        {"query": prompt, "params": params},
+        callbacks=[SimpleStreamlitCallbackHandler(message_area=assistant)],
+    )
+
+    if assistant:
+        with st.expander("Document Similarity Search"):
+            # Find the relevant pages
+            # Write out the first
+            st.write(full_response["docs"])
+
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "content": full_response["answer"],
+            "docs": full_response["docs"],
+        }
+    )

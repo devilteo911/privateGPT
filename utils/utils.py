@@ -55,14 +55,15 @@ class FakeArgs:
 class SimpleStreamlitCallbackHandler(BaseCallbackHandler):
     """Callback Handler that logs to streamlit."""
 
-    def __init__(self) -> None:
-        self.tokens_area = st.empty()
+    def __init__(self, message_area) -> None:
+        self.tokens_area = message_area.empty()
         self.tokens_stream = ""
 
     def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
         """Run on new LLM token. Only available when streaming is enabled."""
-        self.tokens_stream += token
-        self.tokens_area.write(self.tokens_stream)
+        with self.tokens_area:
+            self.tokens_stream += token
+            self.tokens_area.markdown(self.tokens_stream + "▌")
 
 
 def initialize_llm(params, callbacks, rest=False):
