@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from itertools import chain
 import sys
 from dotenv import load_dotenv
 from loguru import logger
@@ -16,6 +17,7 @@ from utils.utils import (
     load_llm_and_retriever,
     overwrite_llm_params,
     parse_arguments,
+    retrieve_document_neighborhood,
     select_retrieval_chain,
 )
 
@@ -57,18 +59,18 @@ def inference(query: Query, callbacks):
     qa = select_retrieval_chain(ggml_model, retriever, params)
 
     docs_to_return = []
-    # Interactive questions and answers
 
+    # Interactive questions and answers
     query = query["query"]
 
-    # Get the answer from the chain
-    res = qa(query)
-    answer, docs = (
-        res["result"],
-        [] if args.hide_source else res["source_documents"],
-    )
+    relevant_docs = retrieve_document_neighborhood(retriever, query, params)
 
-    print(res)
+    # Get the answer from the chain
+    res = qa({"input_documents": relevant_docs, "question": query})
+    answer, docs = (
+        res["output_text"],
+        [] if args.hide_source else res["input_documents"],
+    )
 
     # # Print the relevant sources used for the answer
     for document in docs:

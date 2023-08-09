@@ -1,37 +1,40 @@
 import argparse
 import os
 import shutil
-from typing import Any, Dict, Tuple
+from dataclasses import dataclass
+from itertools import chain
+from pathlib import Path
+from typing import Any, Dict, List, Tuple, Union
 
+import langchain
+import streamlit as st
+from dotenv import load_dotenv
+from langchain.schema import Document
 from fastapi.responses import StreamingResponse
 from langchain import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.chains import RetrievalQA
+from langchain.chains.question_answering import load_qa_chain
+from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
-from langchain.llms import CTransformers, GPT4All, LlamaCpp
+from langchain.llms import CTransformers, GPT4All, LlamaCpp, OpenAI
 from langchain.llms.base import LLM
+from langchain.output_parsers import RegexParser
 from langchain.vectorstores import Chroma
 from langchain.vectorstores.base import VectorStore
-import langchain
-from langchain.llms import OpenAI
-from dotenv import load_dotenv
-from ingest import main as ingest_docs
-from pathlib import Path
-from langchain.chat_models import ChatOpenAI
-
 from loguru import logger
-import streamlit as st
 
 from constants import (
     CHROMA_SETTINGS,
     COMBINED_TEMPLATE,
+    PERSIST_DIRECTORY,
     QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
-from langchain.output_parsers import RegexParser
-from dataclasses import dataclass
+from ingest import does_vectorstore_exist
+from ingest import main as ingest_docs
 
 langchain.verbose = True
 
@@ -177,7 +180,9 @@ def load_llm_and_retriever(
     else:
         logger.info("Using HuggingFace embeddings")
         embeddings = HuggingFaceInstructEmbeddings(
-            model_name=params["embedding_model"], model_kwargs=model_kwargs
+            model_name=params["embedding_model"],
+            model_kwargs=model_kwargs,
+            query_instruction="Represent this sentence for searching relevant passages:",
         )
     # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
@@ -186,10 +191,9 @@ def load_llm_and_retriever(
         embedding_function=embeddings,
         client_settings=CHROMA_SETTINGS,
     )
-    retriever = db.as_retriever(search_kwargs={"k": params["target_source_chunks"]})
     llm = initialize_llm(params, callbacks, rest=rest)
 
-    return llm, retriever
+    return llm, db
 
 
 def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
@@ -222,7 +226,7 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                     "combine_prompt": COMBINE_PROMPT,
                 },
             )
-        case "stuff":
+        case "stuff_old":
             output_parser = RegexParser(
                 regex=r"(.*?)\nScore: (.*)",
                 output_keys=["answer", "score"],
@@ -242,6 +246,18 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                 return_source_documents=True,
                 chain_type_kwargs=chain_type_kwargs,
             )
+        case "stuff":
+            output_parser = RegexParser(
+                regex=r"(.*?)\nScore: (.*)",
+                output_keys=["answer", "score"],
+            )
+            STUFF_PROMPT = PromptTemplate(
+                template=STUFF_TEMPLATE,
+                input_variables=["context", "question"],
+                output_parser=output_parser,
+            )
+            qa = load_qa_chain(llm, prompt=STUFF_PROMPT, chain_type="stuff")
+
         case _default:
             print(f"Chain type {params['chain_type']} not supported!")
             exit
@@ -263,7 +279,9 @@ def check_stored_embeddings(params: dict):
     logger.info(f"{'REMOTE' if params['remote_emb'] else 'LOCAL'} embeddings selected.")
     emb_type = "remote" if params["remote_emb"] else "local"
     emb_saved_type = f"db/{emb_type}_emb.dummy"
-    if not os.path.exists(emb_saved_type):
+    if not os.path.exists(emb_saved_type) or not does_vectorstore_exist(
+        persist_directory=PERSIST_DIRECTORY
+    ):
         shutil.rmtree("db", ignore_errors=True)
         chunk_size = 1500 if params["remote_emb"] else 450
         args = FakeArgs(
@@ -276,9 +294,92 @@ def check_stored_embeddings(params: dict):
         Path(emb_saved_type).touch()
 
 
+def retrieve_document_neighborhood(
+    retriever: VectorStore, query: str, params: dict
+) -> List[Document]:
+    """
+    Retrieve the neighborhood of documents around the top-k documents returned by a similarity search.
+
+    Args:
+        retriever (VectorStore): A VectorStore object used to perform the similarity search.
+        query (str): The query string used to perform the similarity search.
+        params (dict): A dictionary containing parameters for the neighborhood retrieval.
+
+    Returns:
+        List[Document]: A list of dictionaries representing the documents in the neighborhood.
+    """
+    k = params["target_source_chunks"]
+    overlap = params["paragraph_overlap"]
+
+    candidate_docs = retriever.similarity_search(
+        query=query, k=k, distance_metric="cos"
+    )
+
+    if overlap != 0 or params["remote_emb"]:
+        # Picking the neighborhood of the each document based on its id
+        getter = retriever.get()
+        all_docs_and_metas = {
+            k["id"]: v for k, v in zip(getter["metadatas"], getter["documents"])
+        }
+
+        candidate_docs_id = [doc.metadata["id"] for doc in candidate_docs]
+
+        # adding the overlap neighborhood ids
+
+        candidate_docs_id = add_prev_next(candidate_docs_id, all_docs_and_metas)
+
+        docs = [
+            all_docs_and_metas[k] for k in candidate_docs_id if k in all_docs_and_metas
+        ]
+
+        metadatas = [
+            next(item for item in getter["metadatas"] if item["id"] == id_)
+            for id_ in candidate_docs_id
+        ]
+
+        candidate_docs = [
+            Document(page_content=doc, metadata=meta)
+            for doc, meta in zip(docs, metadatas)
+        ]
+
+    return candidate_docs
+
+
+def add_prev_next(mylist: List[int], all_docs: List[Document]) -> List[int]:
+    """
+    Given a list of indices `mylist` and a list of all documents `all_docs`, returns a new list
+    containing the indices of the previous and next documents for each index in `mylist`. If an index
+    is at the beginning or end of `all_docs`, the previous or next index will wrap around to the
+    opposite end of the list.
+
+    Args:
+        mylist (List[int]): A list of indices.
+        all_docs (List[Document]): A list of all documents.
+
+    Returns:
+        List[int]: A new list containing the indices of the previous and next documents for each index
+        in `mylist`.
+    """
+    output = []
+    for i in mylist:
+        if i == 0:
+            # Underflow - add next 2
+            output.extend([i, i + 1, i + 2])
+        elif i == len(all_docs):
+            # Overflow - add prev 2
+            output.extend([i - 2, i - 1, i])
+        else:
+            prev = i - 1 if i > 0 else len(all_docs) - 1
+            next = i + 1 if i < len(all_docs) - 1 else 0
+            output.extend([prev, i, next])
+
+    # FIXME: the list gets reordered, is this something we want?
+    return list(set(output))
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="privateGPT: Ask questions to your documents without an internet connection, "
+        description="OverloadChat: Ask questions to your documents without an internet connection, "
         "using the power of LLMs."
     )
     parser.add_argument(

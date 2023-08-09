@@ -32,6 +32,7 @@ from langchain.vectorstores import Chroma
 from langchain.docstore.document import Document
 from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from constants import CHROMA_SETTINGS
+from loguru import logger
 
 
 load_dotenv()
@@ -156,11 +157,11 @@ def process_documents(
     """
     Load documents and split in chunks
     """
-    print(f"Loading documents from {source_directory}")
+    logger.info(f"Loading documents from {source_directory}")
     documents = load_documents(source_directory, ignored_files)
     if not documents:
-        print("No new documents to load")
-    print(f"Loaded {len(documents)} new documents from {source_directory}")
+        logger.info("No new documents to load")
+    logger.info(f"Loaded {len(documents)} new documents from {source_directory}")
     if not args.rest:
         text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             embeddings.client.tokenizer,
@@ -174,7 +175,8 @@ def process_documents(
             chunk_overlap=args.chunk_overlap,
         )
     texts = text_splitter.split_documents(documents)
-    metadatas = [text.metadata for text in texts]
+    for i, text in enumerate(texts):
+        text.metadata.update({"id": i})
 
     if args.debug and not args.rest:
         model_name = embeddings.model_name
@@ -201,10 +203,10 @@ def process_documents(
             )
 
     # texts = inject_metadata(texts)
-    print(
+    logger.info(
         f"Split into {len(texts)} chunks of text (max. {args.chunk_size} tokens each)"
     )
-    return texts, metadatas
+    return texts
 
 
 def does_vectorstore_exist(persist_directory: str) -> bool:
@@ -235,42 +237,45 @@ def main(args):
     # Create embeddings
     if not args.rest:
         embeddings = HuggingFaceInstructEmbeddings(
-            model_name=embeddings_model_name, model_kwargs={"device": "cuda:1"}
+            model_name=embeddings_model_name,
+            model_kwargs={"device": "cuda:1"},
+            query_instruction="Represent this sentence for searching relevant passages:",
         )
     else:
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
-        print(f"Appending to existing vectorstore at {persist_directory}")
+        logger.info(f"Appending to existing vectorstore at {persist_directory}")
         db = Chroma(
             persist_directory=persist_directory,
             embedding_function=embeddings,
             client_settings=CHROMA_SETTINGS,
         )
         collection = db.get()
-        texts, _ = process_documents(
+        texts = process_documents(
             embeddings,
             args=args,
             ignored_files=[metadata["source"] for metadata in collection["metadatas"]],
         )
-        print("Creating embeddings. May take some minutes...")
+        logger.info("Creating embeddings. May take some minutes...")
         db.add_documents(texts)
     else:
         # Create and store locally vectorstore
-        print("Creating new vectorstore")
-        texts, metadatas = process_documents(embeddings=embeddings, args=args)
-        print("Creating embeddings. May take some minutes...")
+        logger.info("Creating new vectorstore")
+        texts = process_documents(embeddings=embeddings, args=args)
+        logger.info("Creating embeddings. May take some minutes...")
         db = Chroma.from_documents(
             texts,
             embeddings,
             persist_directory=persist_directory,
             client_settings=CHROMA_SETTINGS,
-            metadatas=metadatas,
         )
     db.persist()
     db = None
 
-    print("Ingestion complete! You can now run privateGPT.py to query your documents")
+    logger.info(
+        "Ingestion complete! You can now run privateGPT.py to query your documents"
+    )
 
 
 if __name__ == "__main__":
