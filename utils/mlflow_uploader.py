@@ -44,15 +44,24 @@ def main(args):
     files = dir.rglob("*")
     for file in files:
         if not file.is_dir():
-            s3_dest = (
-                experiment_id
-                + f"/{run.info.run_id}/artifacts/model"
-                + str(file).split(required_path)[-1]
-            )
-            try:
+            if file.name == "MLmodel":
+                s3_dest = experiment_id + f"/{run.info.run_id}/artifacts/model/MLmodel"
                 s3.upload_file(str(file), "mlflow-master", s3_dest)
-            except RecursionError:
-                logger.warning("RecursionError on file: {} ".format(str(file)))
+            else:
+                s3_dest = (
+                    experiment_id
+                    + f"/{run.info.run_id}/artifacts/models--{required_path.split('/')[-1]}"
+                    + str(file).split(required_path)[-1]
+                )
+                try:
+                    s3.upload_file(str(file), "mlflow-master", s3_dest)
+                except RecursionError:
+                    logger.warning(
+                        "RecursionError on file: {} . This is probably due to a boto3 version that is not supported by mlflow".format(
+                            str(file)
+                        )
+                    )
+
     mlflow_cli.set_terminated(run.info.run_id)
 
 
@@ -61,11 +70,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MLFlow Uploader")
 
     # Add the path argument
-    parser.add_argument("path", type=str, help="The required path")
+    parser.add_argument("--path", "-p", type=str, help="The required path")
 
     # Add the experiment id argument
     parser.add_argument(
-        "experiment_id", type=str, help="The ID of the experiment on mlflow"
+        "--experiment_id", "-e", type=str, help="The ID of the experiment on mlflow"
     )
 
     # Parse the command-line arguments
