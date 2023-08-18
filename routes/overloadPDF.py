@@ -124,8 +124,8 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
 
 @router.post("/simpleChat")
 def simple_chat(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
-    params.update(query.params)
-    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
+    params.update(query["params"])
+    ggml_model, _ = load_llm_and_retriever(params, callbacks, rest=True)
     llm = overwrite_llm_params(ggml_model, params)
-    out = llm.generate(prompts=[query.query]).generations[0][0].text
+    out = llm.generate(prompts=[query["query"]]).generations[0][0].text
     return out
