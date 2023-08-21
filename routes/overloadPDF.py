@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
-from itertools import chain
 import sys
+
 from dotenv import load_dotenv
-from loguru import logger
-from pydantic import BaseModel
-from base import QALogger
-from constants import QUESTIONS, QUESTIONS_MULTI_DOC
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-
-
-from constants import PARAMS
 from fastapi import APIRouter
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from pydantic import BaseModel
+
+from utils.helper import QALogger
+from constants import PARAMS, QUESTIONS, QUESTIONS_MULTI_DOC
 from utils.utils import (
     SimpleStreamlitCallbackHandler,
-    check_stored_embeddings,
     load_llm_and_retriever,
     overwrite_llm_params,
     parse_arguments,
@@ -48,11 +44,8 @@ def simple_gen(query: Query):
     return gen
 
 
-# @router.post("/overloadPDF")
 def inference(query: Query, callbacks):
     params.update(query["params"])
-
-    # check_stored_embeddings(params)
 
     ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
     ggml_model = overwrite_llm_params(ggml_model, params)

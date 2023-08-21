@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-import json
-import shutil
-import os
-import glob
-import time
-from typing import List
-from dotenv import load_dotenv
-from multiprocessing import Pool
-from langchain import OpenAI
-from loguru import logger
-from tqdm import tqdm
-from pathlib import Path
 import argparse
+import glob
+import json
+import os
+import shutil
+from pathlib import Path
+from typing import List
 
+from dotenv import load_dotenv
+from langchain.docstore.document import Document
 from langchain.document_loaders import (
     CSVLoader,
     EverNoteLoader,
@@ -26,14 +22,11 @@ from langchain.document_loaders import (
     UnstructuredPowerPointLoader,
     UnstructuredWordDocumentLoader,
 )
-
+from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Weaviate
-from langchain.docstore.document import Document
-from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
-from constants import CHROMA_SETTINGS
 from loguru import logger
-
+from tqdm import tqdm
 
 load_dotenv()
 
@@ -258,8 +251,8 @@ def main(args):
             embeddings,
             weaviate_url=os.environ["WEAVIATE_URL"],
             by_text=False,
-            index_name="Overload_chat",
-            text_key="text",
+            index_name=os.environ["WEAVIATE_INDEX_NAME"],
+            text_key=os.environ["WEAVIATE_TEXT_KEY"],
         )
     else:
         # Create and store locally vectorstore
@@ -271,8 +264,8 @@ def main(args):
             embeddings,
             weaviate_url=os.environ["WEAVIATE_URL"],
             by_text=False,
-            index_name="Overload_chat",
-            text_key="text",
+            index_name=os.environ["WEAVIATE_INDEX_NAME"],
+            text_key=os.environ["WEAVIATE_TEXT_KEY"],
         )
 
     logger.info(

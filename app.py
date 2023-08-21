@@ -3,7 +3,6 @@ import json
 from typing import List, Dict
 from loguru import logger
 import streamlit as st
-from ingest import LOADER_MAPPING, main as ingest_docs
 from routes.overloadPDF import inference, simple_chat
 from utils.utils import FakeArgs, SimpleStreamlitCallbackHandler
 

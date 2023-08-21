@@ -1,20 +1,13 @@
 import argparse
 import os
-import shutil
 from dataclasses import dataclass
-from itertools import chain
-from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import langchain
-import streamlit as st
 import weaviate
 from dotenv import load_dotenv
-from fastapi.responses import StreamingResponse
 from langchain import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
-from langchain.callbacks.streamlit import StreamlitCallbackHandler
 from langchain.chains import RetrievalQA
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chat_models import ChatOpenAI
@@ -22,21 +15,16 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.llms import CTransformers, GPT4All, LlamaCpp, OpenAI
 from langchain.llms.base import LLM
 from langchain.output_parsers import RegexParser
-from langchain.retrievers.weaviate_hybrid_search import WeaviateHybridSearchRetriever
 from langchain.schema import Document
 from langchain.vectorstores import Weaviate
 from langchain.vectorstores.base import VectorStore
 from loguru import logger
 
 from constants import (
-    CHROMA_SETTINGS,
     COMBINED_TEMPLATE,
-    PERSIST_DIRECTORY,
     QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
-from ingest import does_vectorstore_exist
-from ingest import main as ingest_docs
 
 langchain.verbose = True
 
@@ -194,9 +182,9 @@ def load_llm_and_retriever(
 
     db = Weaviate(
         client=db_client,
-        index_name="Overload_chat",
+        index_name=os.environ["WEAVIATE_INDEX_NAME"],
         embedding=embeddings,
-        text_key="text",
+        text_key=os.environ["WEAVIATE_TEXT_KEY"],
         by_text=False,
     )
 
@@ -235,26 +223,6 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
                     "combine_prompt": COMBINE_PROMPT,
                 },
             )
-        case "stuff_old":
-            output_parser = RegexParser(
-                regex=r"(.*?)\nScore: (.*)",
-                output_keys=["answer", "score"],
-            )
-
-            STUFF_PROMPT = PromptTemplate(
-                template=STUFF_TEMPLATE,
-                input_variables=["context", "question"],
-                output_parser=output_parser,
-            )
-
-            chain_type_kwargs = {"prompt": STUFF_PROMPT}
-            qa = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type=params["chain_type"],
-                retriever=retriever,
-                return_source_documents=True,
-                chain_type_kwargs=chain_type_kwargs,
-            )
         case "stuff":
             output_parser = RegexParser(
                 regex=r"(.*?)\nScore: (.*)",
@@ -271,36 +239,6 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
             print(f"Chain type {params['chain_type']} not supported!")
             exit
     return qa
-
-
-def check_stored_embeddings(params: dict):
-    """
-    Checks if stored embeddings exist and updates them if necessary. If we choose to use
-    remote embeddings, we delete the local embeddings and update them with the remote
-    ones and vice versa.
-
-    Args:
-        params (dict): A dictionary containing parameters for the embeddings.
-
-    Returns:
-        None
-    """
-    logger.info(f"{'REMOTE' if params['remote_emb'] else 'LOCAL'} embeddings selected.")
-    emb_type = "remote" if params["remote_emb"] else "local"
-    emb_saved_type = f"db/{emb_type}_emb.dummy"
-    if not os.path.exists(emb_saved_type) or not does_vectorstore_exist(
-        persist_directory=PERSIST_DIRECTORY
-    ):
-        shutil.rmtree("db", ignore_errors=True)
-        chunk_size = 1500 if params["remote_emb"] else 450
-        args = FakeArgs(
-            chunk_size=chunk_size,
-            chunk_overlap=0,
-            debug=False,
-            rest=params["remote_emb"],
-        )
-        ingest_docs(args)
-        Path(emb_saved_type).touch()
 
 
 def retrieve_document_neighborhood(
