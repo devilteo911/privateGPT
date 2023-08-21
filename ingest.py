@@ -28,7 +28,7 @@ from langchain.document_loaders import (
 )
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Chroma
+from langchain.vectorstores import Weaviate
 from langchain.docstore.document import Document
 from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from constants import CHROMA_SETTINGS
@@ -176,7 +176,7 @@ def process_documents(
         )
     texts = text_splitter.split_documents(documents)
     for i, text in enumerate(texts):
-        text.metadata.update({"id": i})
+        text.metadata.update({"doc_id": i})
 
     if args.debug and not args.rest:
         model_name = embeddings.model_name
@@ -248,32 +248,32 @@ def main(args):
     if does_vectorstore_exist(persist_directory):
         # Update and store locally vectorstore
         logger.info(f"Appending to existing vectorstore at {persist_directory}")
-        db = Chroma(
-            persist_directory=persist_directory,
-            embedding_function=embeddings,
-            client_settings=CHROMA_SETTINGS,
-        )
-        collection = db.get()
         texts = process_documents(
             embeddings,
             args=args,
-            ignored_files=[metadata["source"] for metadata in collection["metadatas"]],
         )
         logger.info("Creating embeddings. May take some minutes...")
-        db.add_documents(texts)
+        Weaviate.from_documents(
+            texts,
+            embeddings,
+            weaviate_url=os.environ["WEAVIATE_URL"],
+            by_text=False,
+            index_name="Overload_chat",
+            text_key="text",
+        )
     else:
         # Create and store locally vectorstore
         logger.info("Creating new vectorstore")
         texts = process_documents(embeddings=embeddings, args=args)
         logger.info("Creating embeddings. May take some minutes...")
-        db = Chroma.from_documents(
+        Weaviate.from_documents(
             texts,
             embeddings,
-            persist_directory=persist_directory,
-            client_settings=CHROMA_SETTINGS,
+            weaviate_url=os.environ["WEAVIATE_URL"],
+            by_text=False,
+            index_name="Overload_chat",
+            text_key="text",
         )
-    db.persist()
-    db = None
 
     logger.info(
         "Ingestion complete! You can now run privateGPT.py to query your documents"

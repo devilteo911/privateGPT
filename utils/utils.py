@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Tuple, Union
 
 import langchain
 import streamlit as st
+import weaviate
 from dotenv import load_dotenv
-from langchain.schema import Document
 from fastapi.responses import StreamingResponse
 from langchain import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
@@ -22,7 +22,9 @@ from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.llms import CTransformers, GPT4All, LlamaCpp, OpenAI
 from langchain.llms.base import LLM
 from langchain.output_parsers import RegexParser
-from langchain.vectorstores import Chroma
+from langchain.retrievers.weaviate_hybrid_search import WeaviateHybridSearchRetriever
+from langchain.schema import Document
+from langchain.vectorstores import Weaviate
 from langchain.vectorstores.base import VectorStore
 from loguru import logger
 
@@ -160,7 +162,7 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
 
 def load_llm_and_retriever(
     params: Dict[str, any], callbacks, rest=False
-) -> Tuple[LLM, Chroma]:
+) -> Tuple[LLM, Weaviate]:
     """
     Loads a language model and a retriever based on the given parameters.
 
@@ -187,13 +189,17 @@ def load_llm_and_retriever(
             query_instruction="Represent this sentence for searching relevant passages:",
             encode_kwargs=encode_kwargs,
         )
-    # embeddings.client.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
-    db = Chroma(
-        persist_directory=os.environ.get("PERSIST_DIRECTORY"),
-        embedding_function=embeddings,
-        client_settings=CHROMA_SETTINGS,
+    db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
+
+    db = Weaviate(
+        client=db_client,
+        index_name="Overload_chat",
+        embedding=embeddings,
+        text_key="text",
+        by_text=False,
     )
+
     llm = initialize_llm(params, callbacks, rest=rest)
 
     return llm, db
@@ -320,6 +326,7 @@ def retrieve_document_neighborhood(
 
     if overlap != 0 or params["remote_emb"]:
         # Picking the neighborhood of the each document based on its id
+        # FIXME: the get() method is not present with Weaviate DBs
         getter = retriever.get()
         all_docs_and_metas = {
             k["id"]: v for k, v in zip(getter["metadatas"], getter["documents"])

@@ -52,7 +52,7 @@ def simple_gen(query: Query):
 def inference(query: Query, callbacks):
     params.update(query["params"])
 
-    check_stored_embeddings(params)
+    # check_stored_embeddings(params)
 
     ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
     ggml_model = overwrite_llm_params(ggml_model, params)
