@@ -233,7 +233,6 @@ def main(args):
         embeddings = HuggingFaceInstructEmbeddings(
             model_name=embeddings_model_name,
             model_kwargs={"device": "cuda:1"},
-            query_instruction="Represent this sentence for searching relevant passages:",
             encode_kwargs=encode_kwargs,
         )
     else:
