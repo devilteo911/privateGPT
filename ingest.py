@@ -250,9 +250,9 @@ def main(args):
             texts,
             embeddings,
             weaviate_url=os.environ["WEAVIATE_URL"],
-            by_text=False,
             index_name=os.environ["WEAVIATE_INDEX_NAME"],
             text_key=os.environ["WEAVIATE_TEXT_KEY"],
+            by_text=False,
         )
     else:
         # Create and store locally vectorstore
@@ -263,9 +263,9 @@ def main(args):
             texts,
             embeddings,
             weaviate_url=os.environ["WEAVIATE_URL"],
-            by_text=False,
             index_name=os.environ["WEAVIATE_INDEX_NAME"],
             text_key=os.environ["WEAVIATE_TEXT_KEY"],
+            by_text=False,
         )
 
     logger.info(

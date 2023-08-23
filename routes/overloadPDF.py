@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
+import os
 import sys
 
 from dotenv import load_dotenv
 from fastapi import APIRouter
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from pydantic import BaseModel
+import weaviate
 
 from utils.helper import QALogger
 from constants import PARAMS, QUESTIONS, QUESTIONS_MULTI_DOC
@@ -47,7 +49,10 @@ def simple_gen(query: Query):
 def inference(query: Query, callbacks):
     params.update(query["params"])
 
-    ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
+    db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
+    ggml_model, retriever = load_llm_and_retriever(
+        db_client, params, callbacks, rest=True
+    )
     ggml_model = overwrite_llm_params(ggml_model, params)
     qa = select_retrieval_chain(ggml_model, retriever, params)
 
@@ -56,7 +61,7 @@ def inference(query: Query, callbacks):
     # Interactive questions and answers
     query = query["query"]
 
-    relevant_docs = retrieve_document_neighborhood(retriever, query, params)
+    relevant_docs = retrieve_document_neighborhood(db_client, retriever, query, params)
 
     # Get the answer from the chain
     res = qa({"input_documents": relevant_docs, "question": query})

@@ -25,6 +25,7 @@ from constants import (
     QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
+from utils.helper import get_all_documents_from_db
 
 langchain.verbose = True
 
@@ -149,7 +150,7 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
 
 
 def load_llm_and_retriever(
-    params: Dict[str, any], callbacks, rest=False
+    db_client: weaviate.Client, params: Dict[str, any], callbacks, rest=False
 ) -> Tuple[LLM, Weaviate]:
     """
     Loads a language model and a retriever based on the given parameters.
@@ -178,19 +179,18 @@ def load_llm_and_retriever(
             encode_kwargs=encode_kwargs,
         )
 
-    db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
-
     db = Weaviate(
         client=db_client,
         index_name=os.environ["WEAVIATE_INDEX_NAME"],
         embedding=embeddings,
         text_key=os.environ["WEAVIATE_TEXT_KEY"],
         by_text=False,
+        attributes=["doc_id", "page", "source", "text"],
     )
 
     llm = initialize_llm(params, callbacks, rest=rest)
 
-    return llm, db
+    return llm, db.as_retriever()
 
 
 def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
@@ -242,7 +242,7 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
 
 
 def retrieve_document_neighborhood(
-    retriever: VectorStore, query: str, params: dict
+    db_client, retriever: VectorStore, query: str, params: dict
 ) -> List[Document]:
     """
     Retrieve the neighborhood of documents around the top-k documents returned by a similarity search.
@@ -258,19 +258,20 @@ def retrieve_document_neighborhood(
     k = params["target_source_chunks"]
     overlap = params["paragraph_overlap"]
 
-    candidate_docs = retriever.similarity_search(
-        query=query, k=k, distance_metric="cos"
+    candidate_docs = retriever.vectorstore.similarity_search(
+        query=query,
+        k=k,
+        search_distance="cos",
     )
 
     if overlap != 0 or params["remote_emb"]:
         # Picking the neighborhood of the each document based on its id
-        # FIXME: the get() method is not present with Weaviate DBs
-        getter = retriever.get()
+        getter = get_all_documents_from_db(db_client)
         all_docs_and_metas = {
-            k["id"]: v for k, v in zip(getter["metadatas"], getter["documents"])
+            k["doc_id"]: v for k, v in zip(getter["metadatas"], getter["documents"])
         }
 
-        candidate_docs_id = [doc.metadata["id"] for doc in candidate_docs]
+        candidate_docs_id = [doc.metadata["doc_id"] for doc in candidate_docs]
 
         # adding the overlap neighborhood ids
 
@@ -281,7 +282,7 @@ def retrieve_document_neighborhood(
         ]
 
         metadatas = [
-            next(item for item in getter["metadatas"] if item["id"] == id_)
+            next(item for item in getter["metadatas"] if item["doc_id"] == id_)
             for id_ in candidate_docs_id
         ]
 
@@ -321,7 +322,6 @@ def add_prev_next(mylist: List[int], all_docs: List[Document]) -> List[int]:
             next = i + 1 if i < len(all_docs) - 1 else 0
             output.extend([prev, i, next])
 
-    # FIXME: the list gets reordered, is this something we want?
     return list(set(output))
 
 

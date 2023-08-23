@@ -64,6 +64,7 @@ def main():
     )
 
     with st.expander(label="File uploader"):
+        # FIXME: ingestion
         if uploaded_files := st.sidebar.file_uploader(
             "Upload a file",
             # type=[x.replace(".", "") for x in LOADER_MAPPING.keys()],
@@ -79,7 +80,6 @@ def main():
                     if i == total_docs - 1:
                         pass
                     args = FakeArgs()
-                    ingest_docs(args)
 
     # Add sliders to sidebar
     st.sidebar.subheader("Remote Selection")
