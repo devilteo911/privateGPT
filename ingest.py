@@ -163,11 +163,13 @@ def update_metadata(
         IndexError: If no md5 value is found for the current source.
     """
     prev_source = texts[0].metadata["source"]
+    prev_i = 0
     for i, text in enumerate(texts):
         curr_source = texts[i].metadata["source"]
         if curr_source != prev_source:
             prev_source = curr_source
-        text.metadata.update({"doc_id": i})
+            prev_i = i
+        text.metadata.update({"doc_id": i - prev_i})
         text.metadata["md5"] = [
             item[prev_source] for item in md5s if prev_source in item
         ][0]
