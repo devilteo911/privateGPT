@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import argparse
 import glob
+import hashlib
 import json
 import os
-import shutil
 from pathlib import Path
 from typing import List
 
+import weaviate
 from dotenv import load_dotenv
 from langchain.docstore.document import Document
 from langchain.document_loaders import (
@@ -24,7 +25,6 @@ from langchain.document_loaders import (
 )
 from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import Weaviate
 from loguru import logger
 from tqdm import tqdm
 
@@ -145,7 +145,7 @@ def inject_metadata(texts):
 
 
 def process_documents(
-    embeddings, args, ignored_files: List[str] = []
+    embeddings, args, md5s, ignored_files: List[str] = []
 ) -> List[Document]:
     """
     Load documents and split in chunks
@@ -168,8 +168,16 @@ def process_documents(
             chunk_overlap=args.chunk_overlap,
         )
     texts = text_splitter.split_documents(documents)
+
+    prev_source = texts[0].metadata["source"]
     for i, text in enumerate(texts):
+        curr_source = texts[i].metadata["source"]
+        if curr_source != prev_source:
+            prev_source = curr_source
         text.metadata.update({"doc_id": i})
+        text.metadata["md5"] = [
+            item[prev_source] for item in md5s if prev_source in item
+        ][0]
 
     if args.debug and not args.rest:
         model_name = embeddings.model_name
@@ -202,31 +210,32 @@ def process_documents(
     return texts
 
 
-def does_vectorstore_exist(persist_directory: str) -> bool:
-    """
-    Checks if vectorstore exists
-    """
-    if os.path.exists(os.path.join(persist_directory, "index")):
-        if os.path.exists(
-            os.path.join(persist_directory, "chroma-collections.parquet")
-        ) and os.path.exists(
-            os.path.join(persist_directory, "chroma-embeddings.parquet")
-        ):
-            list_index_files = glob.glob(os.path.join(persist_directory, "index/*.bin"))
-            list_index_files += glob.glob(
-                os.path.join(persist_directory, "index/*.pkl")
-            )
-            # At least 3 documents are needed in a working vectorstore
-            if len(list_index_files) > 3:
-                return True
-    return False
+def calculate_md5(file_path):
+    md5_list = []
+    files = Path(file_path).glob("*")
+
+    for filename in files:
+        with open(filename, "rb") as f:
+            data = f.read()
+            file_hash = hashlib.md5(data).hexdigest()
+
+        md5_list.append({str(filename): file_hash})
+    return md5_list
+
+
+def skip_already_processed_documents(md5_list, db_client):
+    # TO BE IMPLEMENTED
+    pass
+
+
+def db_is_already_populated(db_client):
+    if db_client.data_object.get()["objects"] != []:
+        return True
+    else:
+        return False
 
 
 def main(args):
-    if args.debug:
-        logger.info("Removing old vectorstore if exists")
-        if os.path.exists("db"):
-            shutil.rmtree("db")
     # Create embeddings
     if not args.rest:
         encode_kwargs = {"normalize_embeddings": True}
@@ -237,44 +246,41 @@ def main(args):
         )
     else:
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
-    if does_vectorstore_exist(persist_directory):
-        # Update and store locally vectorstore
-        logger.info(f"Appending to existing vectorstore at {persist_directory}")
-        texts = process_documents(
-            embeddings,
-            args=args,
-        )
-        logger.info("Creating embeddings. May take some minutes...")
-        Weaviate.from_documents(
-            texts,
-            embeddings,
-            weaviate_url=os.environ["WEAVIATE_URL"],
-            index_name=os.environ["WEAVIATE_INDEX_NAME"],
-            text_key=os.environ["WEAVIATE_TEXT_KEY"],
-            by_text=False,
-        )
-    else:
-        # Create and store locally vectorstore
-        logger.info("Creating new vectorstore")
-        texts = process_documents(embeddings=embeddings, args=args)
-        logger.info("Creating embeddings. May take some minutes...")
-        Weaviate.from_documents(
-            texts,
-            embeddings,
-            weaviate_url=os.environ["WEAVIATE_URL"],
-            index_name=os.environ["WEAVIATE_INDEX_NAME"],
-            text_key=os.environ["WEAVIATE_TEXT_KEY"],
-            by_text=False,
+
+    db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
+    md5_list = calculate_md5(source_directory)
+
+    # ignored_files = (
+    #     skip_already_processed_documents(md5_list, db_client)
+    #     if db_is_already_populated(db_client)
+    #     else []
+    # )
+    ignored_files = []
+
+    # Update and store locally vectorstore
+    logger.info("Creating embeddings, it may take some minutes...")
+    texts = process_documents(
+        embeddings, args=args, ignored_files=ignored_files, md5s=md5_list
+    )
+    # use weaviate to create data objects to db
+
+    logger.info(f"Appending to db with class_name {os.environ['WEAVIATE_INDEX_NAME']}")
+
+    for text in texts:
+        text = dict(text)
+        db_client.data_object.create(
+            data_object={"text": text.pop("page_content"), **text["metadata"]},
+            class_name=os.environ["WEAVIATE_INDEX_NAME"],
         )
 
-    logger.info(
-        "Ingestion complete! You can now run privateGPT.py to query your documents"
+    logger.success(
+        "Ingestion complete! You can now run overload-chat to query your documents"
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Process documents for privateGPT ingestion"
+        description="Process documents for Overload-Chat ingestion"
     )
     parser.add_argument(
         "--debug",

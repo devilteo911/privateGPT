@@ -5,6 +5,7 @@ from loguru import logger
 import streamlit as st
 from routes.overloadPDF import inference, simple_chat
 from utils.utils import FakeArgs, SimpleStreamlitCallbackHandler
+from ingest import main as ingest_data
 
 # Sidebar
 
@@ -79,7 +80,8 @@ def main():
                         f.write(bytes_data)
                     if i == total_docs - 1:
                         pass
-                    args = FakeArgs()
+                    args = FakeArgs(chunk_size=450, chunk_overlap=0)
+                    ingest_data(args)
 
     # Add sliders to sidebar
     st.sidebar.subheader("Remote Selection")
