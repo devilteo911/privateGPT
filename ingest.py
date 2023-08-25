@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import weaviate
 from dotenv import load_dotenv
@@ -144,6 +144,34 @@ def inject_metadata(texts):
     return texts
 
 
+def update_metadata(
+    texts: List[Document], md5s: List[Dict[str, str]]
+) -> List[Document]:
+    """
+    Update the metadata of a list of texts.
+
+    Args:
+        texts (List[Document]): A list of Langchain Documents.
+        md5s (List[Dict[str, str]]): A list of dictionaries containing the md5 values for each source.
+
+    Returns:
+        List[Document]: A list of Document objects with updated metadata.
+
+    Raises:
+        IndexError: If no md5 value is found for the current source.
+    """
+    prev_source = texts[0].metadata["source"]
+    for i, text in enumerate(texts):
+        curr_source = texts[i].metadata["source"]
+        if curr_source != prev_source:
+            prev_source = curr_source
+        text.metadata.update({"doc_id": i})
+        text.metadata["md5"] = [
+            item[prev_source] for item in md5s if prev_source in item
+        ][0]
+    return texts
+
+
 def process_documents(
     embeddings, args, md5s, ignored_files: List[str] = []
 ) -> List[Document]:
@@ -169,15 +197,8 @@ def process_documents(
         )
     texts = text_splitter.split_documents(documents)
 
-    prev_source = texts[0].metadata["source"]
-    for i, text in enumerate(texts):
-        curr_source = texts[i].metadata["source"]
-        if curr_source != prev_source:
-            prev_source = curr_source
-        text.metadata.update({"doc_id": i})
-        text.metadata["md5"] = [
-            item[prev_source] for item in md5s if prev_source in item
-        ][0]
+    # Call the function with your desired arguments
+    texts = update_metadata(texts, md5s)
 
     if args.debug and not args.rest:
         model_name = embeddings.model_name
