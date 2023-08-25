@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List
+import numpy as np
+import pandas as pd
 
 import weaviate
 from dotenv import load_dotenv
@@ -182,6 +184,7 @@ def process_documents(
     documents = load_documents(source_directory, ignored_files)
     if not documents:
         logger.info("No new documents to load")
+        return
     logger.info(f"Loaded {len(documents)} new documents from {source_directory}")
     if not args.rest:
         text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
@@ -200,29 +203,9 @@ def process_documents(
     # Call the function with your desired arguments
     texts = update_metadata(texts, md5s)
 
+    # Check how the tokenizer splits text
     if args.debug and not args.rest:
-        model_name = embeddings.model_name
-        tok_voc = {v: k for k, v in embeddings.client.tokenizer.vocab.items()}
-        dict_tokenization = []
-        # Not so pythonic loop but it keeps the Document class otherwise texts[i] becomes a tuple
-        for i in range(len(texts)):
-            tokenization = " ".join(
-                [
-                    tok_voc[x]
-                    for x in embeddings.client.tokenizer(texts[i].page_content)[
-                        "input_ids"
-                    ]
-                ]
-            )
-            dict_tokenization.append(
-                {f"{i}_{texts[i].metadata['source']}": tokenization}
-            )
-        with open(f"logs/debug_{model_name.split('/')[-1]}.json", "w") as f:
-            json.dump(
-                dict_tokenization,
-                f,
-                ensure_ascii=False,
-            )
+        save_tokenize_chunking(texts, embeddings)
 
     # texts = inject_metadata(texts)
     logger.info(
@@ -245,8 +228,32 @@ def calculate_md5(file_path):
 
 
 def skip_already_processed_documents(md5_list, db_client):
-    # TO BE IMPLEMENTED
-    pass
+    """
+    Returns a list of files from `md5_list` that have already been processed and are present in the database.
+
+    Parameters:
+    - `md5_list` (list): A list of dictionaries containing MD5 values of documents.
+    - `db_client` (object): An instance of the database client.
+
+    Returns:
+    - `ignored_files` (list): A list of files that have already been processed and are present in the database.
+    """
+    class_name = os.environ["WEAVIATE_INDEX_NAME"]
+    db_md5 = db_client.query.get(class_name, ["md5"]).do()["data"]["Get"][class_name]
+    db_md5_df = pd.DataFrame(db_md5)
+    md5_to_process_df = pd.DataFrame(
+        [list(d.values())[0] for d in md5_list],
+        index=[list(d.keys())[0] for d in md5_list],
+        columns=["md5"],
+    )
+    ignored_md5 = pd.Series(
+        list(set(md5_to_process_df["md5"]).intersection(db_md5_df["md5"]))
+    ).to_list()
+
+    ignored_files = md5_to_process_df.index[
+        md5_to_process_df["md5"].isin(ignored_md5)
+    ].to_list()
+    return ignored_files
 
 
 def db_is_already_populated(db_client):
@@ -254,6 +261,28 @@ def db_is_already_populated(db_client):
         return True
     else:
         return False
+
+
+def save_tokenize_chunking(texts, embeddings):
+    model_name = embeddings.model_name
+    tok_voc = {v: k for k, v in embeddings.client.tokenizer.vocab.items()}
+    dict_tokenization = []
+
+    for i in range(len(texts)):
+        tokenization = " ".join(
+            [
+                tok_voc[x]
+                for x in embeddings.client.tokenizer(texts[i].page_content)["input_ids"]
+            ]
+        )
+        dict_tokenization.append({f"{i}_{texts[i].metadata['source']}": tokenization})
+
+    with open(f"logs/debug_{model_name.split('/')[-1]}.json", "w") as f:
+        json.dump(
+            dict_tokenization,
+            f,
+            ensure_ascii=False,
+        )
 
 
 def main(args):
@@ -271,12 +300,11 @@ def main(args):
     db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
     md5_list = calculate_md5(source_directory)
 
-    # ignored_files = (
-    #     skip_already_processed_documents(md5_list, db_client)
-    #     if db_is_already_populated(db_client)
-    #     else []
-    # )
-    ignored_files = []
+    ignored_files = (
+        skip_already_processed_documents(md5_list, db_client)
+        if db_is_already_populated(db_client)
+        else []
+    )
 
     # Update and store locally vectorstore
     logger.info("Creating embeddings, it may take some minutes...")
@@ -287,16 +315,21 @@ def main(args):
 
     logger.info(f"Appending to db with class_name {os.environ['WEAVIATE_INDEX_NAME']}")
 
-    for text in texts:
-        text = dict(text)
-        db_client.data_object.create(
-            data_object={"text": text.pop("page_content"), **text["metadata"]},
-            class_name=os.environ["WEAVIATE_INDEX_NAME"],
-        )
+    if texts:
+        for text in texts:
+            text = dict(text)
+            db_client.data_object.create(
+                data_object={"text": text.pop("page_content"), **text["metadata"]},
+                class_name=os.environ["WEAVIATE_INDEX_NAME"],
+            )
 
-    logger.success(
-        "Ingestion complete! You can now run overload-chat to query your documents"
-    )
+        logger.success(
+            "Ingestion complete! You can now run overload-chat to query your documents"
+        )
+    else:
+        logger.success(
+            "No new documents to ingest! You can now run overload-chat to query your documents"
+        )
 
 
 if __name__ == "__main__":
