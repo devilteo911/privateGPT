@@ -140,7 +140,19 @@ def load_metadata_file(path, src_dir):
     return df
 
 
-def inject_metadata_to_chunk(texts, stored_metadata):
+def inject_metadata_to_chunk(
+    texts: List[Document], stored_metadata: pd.DataFrame
+) -> List[Document]:
+    """
+    Injects metadata into each text in the given list of texts.
+
+    Args:
+        texts (List[Document]): A list of Text objects.
+        stored_metadata (pd.DataFrame): A DataFrame containing stored metadata.
+
+    Returns:
+        List[Document]: The list of texts with metadata injected into each text.
+    """
     for text in texts:
         file, chapter, policy = (
             stored_metadata.loc[stored_metadata["file"] == text.metadata["source"]]
@@ -148,7 +160,7 @@ def inject_metadata_to_chunk(texts, stored_metadata):
             .tolist()
         )
 
-        context = f"Il documento fa riferimento al file {file} nella sezione {chapter} della polizza {policy} alla pagina {text.metadata['page']}.\\n\n"
+        context = f"Il documento fa riferimento al file '{file}' alla sezione '{chapter}' della polizza '{policy}' alla pagina {text.metadata['page']}.\\n\n"
         text.page_content = context + text.page_content
     return texts
 
@@ -323,13 +335,13 @@ def main(args):
     db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
     md5_list = calculate_md5(source_directory)
 
-    ignored_files = (
-        skip_already_processed_documents(md5_list, db_client)
-        if db_is_already_populated(db_client)
-        else []
-    )
+    # ignored_files = (
+    #     skip_already_processed_documents(md5_list, db_client)
+    #     if db_is_already_populated(db_client)
+    #     else []
+    # )
 
-    # ignored_files = []
+    ignored_files = []
 
     # Update and store locally vectorstore
     logger.info("Creating embeddings, it may take some minutes...")
