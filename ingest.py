@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, List
+import charset_normalizer
 import numpy as np
 import pandas as pd
 
@@ -98,14 +99,17 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
     """
     Loads all documents from the source documents directory, ignoring specified files
     """
+
     all_files = []
     for ext in LOADER_MAPPING:
         all_files.extend(
             glob.glob(os.path.join(source_dir, f"**/*{ext}"), recursive=True)
         )
+
     filtered_files = [
         file_path for file_path in all_files if file_path not in ignored_files
     ]
+
     results = []
     with tqdm(
         total=len(filtered_files), desc="Loading new documents", ncols=80
@@ -114,6 +118,7 @@ def load_documents(source_dir: str, ignored_files: List[str] = []) -> List[Docum
             docs = load_single_document(file_path)
             results.extend(docs)
             pbar.update()
+
     return results
 
 
@@ -123,26 +128,28 @@ def save_to_txt(documents):
         Path(txt_filename).write_text(document.page_content)
 
 
-def add_metadata(documents, inject_in_the_page_content: bool = False):
-    for document in documents:
-        polizze = document.page_content.split("\n\n")[0].split("+")
-        if inject_in_the_page_content:
-            document.metadata["__polizze"] = [polizza for polizza in polizze]
-            # document.page_content = "Il documento fa riferimento alle polizze: " + ", ".join([polizza for polizza in polizze]) + "\n\n" + document.page_content
-        else:
-            document.metadata["polizze"] = [polizza for polizza in polizze]
-    return documents
+def load_metadata_file(path, src_dir):
+    # guessing the encoding
+    with open(path, "rb") as f:
+        result = charset_normalizer.detect(f.read(10000))
+
+    df = pd.read_csv(path, sep=";", encoding=result["encoding"])
+    df = df.fillna("")
+    # TODO: make it with non-fixed extension
+    df["file"] = src_dir + "/" + df["file"] + ".pdf"
+    return df
 
 
-def inject_metadata(texts):
+def inject_metadata_to_chunk(texts, stored_metadata):
     for text in texts:
-        context = ""
-        for k, v in text.metadata.items():
-            if not k.startswith("__"):
-                continue
-            context += f"Il documento fa riferimento a {k[2:]}: {','.join(v)}\n\n"
+        file, chapter, policy = (
+            stored_metadata.loc[stored_metadata["file"] == text.metadata["source"]]
+            .iloc[0]
+            .tolist()
+        )
+
+        context = f"Il documento fa riferimento al file {file} nella sezione {chapter} della polizza {policy} alla pagina {text.metadata['page']}.\\n\n"
         text.page_content = context + text.page_content
-        text.metadata.pop(k)
     return texts
 
 
@@ -203,13 +210,16 @@ def process_documents(
     texts = text_splitter.split_documents(documents)
 
     # Call the function with your desired arguments
+    stored_metadata = load_metadata_file(
+        path="resources/indexer.csv", src_dir=source_directory
+    )
+    texts = inject_metadata_to_chunk(texts, stored_metadata)
     texts = update_metadata(texts, md5s)
 
     # Check how the tokenizer splits text
     if args.debug and not args.rest:
         save_tokenize_chunking(texts, embeddings)
 
-    # texts = inject_metadata(texts)
     logger.info(
         f"Split into {len(texts)} chunks of text (max. {args.chunk_size} tokens each)"
     )
@@ -229,6 +239,10 @@ def calculate_md5(file_path):
     return md5_list
 
 
+def add_metadatas_to_text(texts, stored_metadatas):
+    pass
+
+
 def skip_already_processed_documents(md5_list, db_client):
     """
     Returns a list of files from `md5_list` that have already been processed and are present in the database.
@@ -241,13 +255,20 @@ def skip_already_processed_documents(md5_list, db_client):
     - `ignored_files` (list): A list of files that have already been processed and are present in the database.
     """
     class_name = os.environ["WEAVIATE_INDEX_NAME"]
-    db_md5 = db_client.query.get(class_name, ["md5"]).do()["data"]["Get"][class_name]
+
+    # FIXME: temporary workaround to get all the document
+    db_md5 = (
+        db_client.query.get(class_name, ["md5"])
+        .with_limit(1000)
+        .do()["data"]["Get"][class_name]
+    )
     db_md5_df = pd.DataFrame(db_md5)
     md5_to_process_df = pd.DataFrame(
         [list(d.values())[0] for d in md5_list],
         index=[list(d.keys())[0] for d in md5_list],
         columns=["md5"],
     )
+
     ignored_md5 = pd.Series(
         list(set(md5_to_process_df["md5"]).intersection(db_md5_df["md5"]))
     ).to_list()
@@ -307,6 +328,8 @@ def main(args):
         if db_is_already_populated(db_client)
         else []
     )
+
+    # ignored_files = []
 
     # Update and store locally vectorstore
     logger.info("Creating embeddings, it may take some minutes...")
