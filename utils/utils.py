@@ -8,24 +8,19 @@ import weaviate
 from dotenv import load_dotenv
 from langchain import PromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
-from langchain.chains import RetrievalQA
 from langchain.chains.question_answering import load_qa_chain
 from langchain.chat_models import ChatOpenAI
-from langchain.embeddings import HuggingFaceInstructEmbeddings, OpenAIEmbeddings
 from langchain.llms import CTransformers, GPT4All, LlamaCpp, OpenAI
 from langchain.llms.base import LLM
 from langchain.output_parsers import RegexParser
 from langchain.schema import Document
 from langchain.vectorstores import Weaviate
-from langchain.vectorstores.base import VectorStore
 from loguru import logger
 
 from constants import (
-    COMBINED_TEMPLATE,
-    QUESTION_TEMPLATE,
     STUFF_TEMPLATE,
 )
-from utils.helper import get_all_documents_from_db
+from utils.helper import remove_duplicated_paragraphs
 
 langchain.verbose = True
 
@@ -225,10 +220,11 @@ def retrieve_document_neighborhood(
     """
 
     overlap = params["paragraph_overlap"]
-    if overlap > 0:
-        k = params["target_source_chunks"]
-    else:
-        k = params["target_source_chunks"] + 4
+    k = (
+        params["target_source_chunks"]
+        if overlap > 0
+        else params["target_source_chunks"] + 4
+    )
     class_name = os.environ["WEAVIATE_INDEX_NAME"]
 
     candidate_docs = (
@@ -241,32 +237,19 @@ def retrieve_document_neighborhood(
 
     if overlap != 0 or params["remote_emb"]:
         # Picking the neighborhood of the each document based on its id
-        getter = get_all_documents_from_db(retriever)
-        all_docs_and_metas = {
-            k["doc_id"]: v for k, v in zip(getter["metadatas"], getter["documents"])
-        }
-
-        candidate_docs_id = [
-            {"source": doc["source"], "page": doc["page"], "doc_id": doc["doc_id"]}
-            for doc in candidate_docs
-        ]
+        candidate_docs_id = [{doc["source"]: doc["doc_id"]} for doc in candidate_docs]
 
         # adding the overlap neighborhood ids
-
-        candidate_docs_id = add_prev_next(candidate_docs_id, all_docs_and_metas)
-
-        docs = [
-            all_docs_and_metas[k] for k in candidate_docs_id if k in all_docs_and_metas
-        ]
+        candidate_paragraph = add_prev_next(retriever, candidate_docs_id)
 
         metadatas = [
-            next(item for item in getter["metadatas"] if item["doc_id"] == id_)
-            for id_ in candidate_docs_id
+            {"source": doc["source"], "page": doc["page"], "doc_id": doc["doc_id"]}
+            for doc in candidate_paragraph
         ]
 
         candidate_docs = [
-            Document(page_content=doc, metadata=meta)
-            for doc, meta in zip(docs, metadatas)
+            Document(page_content=doc["text"], metadata=meta)
+            for doc, meta in zip(candidate_paragraph, metadatas)
         ]
     else:
         metadatas = [
@@ -281,35 +264,54 @@ def retrieve_document_neighborhood(
     return candidate_docs
 
 
-def add_prev_next(mylist: List[int], all_docs: List[Document]) -> List[int]:
-    """
-    Given a list of indices `mylist` and a list of all documents `all_docs`, returns a new list
-    containing the indices of the previous and next documents for each index in `mylist`. If an index
-    is at the beginning or end of `all_docs`, the previous or next index will wrap around to the
-    opposite end of the list.
-
-    Args:
-        mylist (List[int]): A list of indices.
-        all_docs (List[Document]): A list of all documents.
-
-    Returns:
-        List[int]: A new list containing the indices of the previous and next documents for each index
-        in `mylist`.
-    """
-    output = []
-    for i in mylist:
-        if i == 0:
-            # Underflow - add next 2
-            output.extend([i, i + 1, i + 2])
-        elif i == len(all_docs):
-            # Overflow - add prev 2
-            output.extend([i - 2, i - 1, i])
+def add_prev_next(retriever: weaviate.Client, candidates: dict):
+    index_name = os.environ["WEAVIATE_INDEX_NAME"]
+    result = []
+    for elem in candidates:
+        source = next(iter(elem.keys()))
+        id_ = elem[source]
+        if id_ == 0:
+            lower_limit = id_ - 1
+            upper_limit = id_ + 3
         else:
-            prev = i - 1 if i > 0 else len(all_docs) - 1
-            next = i + 1 if i < len(all_docs) - 1 else 0
-            output.extend([prev, i, next])
+            lower_limit = id_ - 2
+            upper_limit = id_ + 2
 
-    return list(set(output))
+        query = (
+            retriever.query.get(index_name, ["doc_id", "source", "page", "text"])
+            .with_limit(1000)
+            .with_where(
+                {
+                    "operator": "And",
+                    "operands": [
+                        {
+                            "path": ["source"],
+                            "operator": "Equal",
+                            "valueText": source,
+                        },
+                        {
+                            "operator": "And",
+                            "operands": [
+                                {
+                                    "path": ["doc_id"],
+                                    "operator": "GreaterThan",
+                                    "valueNumber": lower_limit,
+                                },
+                                {
+                                    "path": ["doc_id"],
+                                    "operator": "LessThan",
+                                    "valueNumber": upper_limit,
+                                },
+                            ],
+                        },
+                    ],
+                }
+            )
+        )
+
+        result.append(query.do()["data"]["Get"][index_name])
+    result = remove_duplicated_paragraphs(result)
+    return result
 
 
 def parse_arguments():
