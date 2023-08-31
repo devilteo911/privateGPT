@@ -49,19 +49,14 @@ def simple_gen(query: Query):
 def inference(query: Query, callbacks):
     params.update(query["params"])
 
-    db_client = weaviate.Client(url=os.environ["WEAVIATE_URL"])
-    ggml_model, retriever = load_llm_and_retriever(
-        db_client, params, callbacks, rest=True
-    )
+    ggml_model, db_client = load_llm_and_retriever(params, callbacks, rest=True)
     ggml_model = overwrite_llm_params(ggml_model, params)
-    qa = select_retrieval_chain(ggml_model, retriever, params)
-
-    docs_to_return = []
+    qa = select_retrieval_chain(ggml_model, params)
 
     # Interactive questions and answers
     query = query["query"]
 
-    relevant_docs = retrieve_document_neighborhood(db_client, retriever, query, params)
+    relevant_docs = retrieve_document_neighborhood(db_client, query, params)
 
     # Get the answer from the chain
     res = qa({"input_documents": relevant_docs, "question": query})
@@ -69,6 +64,8 @@ def inference(query: Query, callbacks):
         res["output_text"],
         [] if args.hide_source else res["input_documents"],
     )
+
+    docs_to_return = []
 
     # # Print the relevant sources used for the answer
     for document in docs:
@@ -121,7 +118,7 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
 
 
 @router.post("/simpleChat")
-def simple_chat(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
+def simple_chat(query: dict, callbacks=[StreamingStdOutCallbackHandler()]):
     params.update(query["params"])
     ggml_model, _ = load_llm_and_retriever(params, callbacks, rest=True)
     llm = overwrite_llm_params(ggml_model, params)

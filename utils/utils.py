@@ -150,7 +150,7 @@ def overwrite_llm_params(llm: LLM, params: Dict[str, float]) -> LLM:
 
 
 def load_llm_and_retriever(
-    db_client: weaviate.Client, params: Dict[str, any], callbacks, rest=False
+    params: Dict[str, any], callbacks, rest=False
 ) -> Tuple[LLM, Weaviate]:
     """
     Loads a language model and a retriever based on the given parameters.
@@ -165,35 +165,18 @@ def load_llm_and_retriever(
 
     logger.info(f"Current params: {params}")
 
-    model_kwargs = {"device": "cuda:1"}
-    if params["remote_emb"]:
-        logger.info("Using OpenAI embeddings")
-        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
-    else:
-        logger.info("Using HuggingFace embeddings")
-        encode_kwargs = {"normalize_embeddings": True}
-        embeddings = HuggingFaceInstructEmbeddings(
-            model_name=params["embedding_model"],
-            model_kwargs=model_kwargs,
-            query_instruction="Represent this sentence for searching relevant passages:",
-            encode_kwargs=encode_kwargs,
-        )
+    # TODO: once we finish dealing with local embedding with weaviate we get back to this
+    # if params["remote_emb"]:
+    #     logger.info("Using OpenAI embeddings")
+    #     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key_emb)
 
-    db = Weaviate(
-        client=db_client,
-        index_name=os.environ["WEAVIATE_INDEX_NAME"],
-        embedding=embeddings,
-        text_key=os.environ["WEAVIATE_TEXT_KEY"],
-        by_text=False,
-        attributes=["doc_id", "page", "source", "text"],
-    )
-
+    db = weaviate.Client(url=os.environ["WEAVIATE_URL"])
     llm = initialize_llm(params, callbacks, rest=rest)
 
-    return llm, db.as_retriever()
+    return llm, db
 
 
-def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
+def select_retrieval_chain(llm: LLM, params: dict):
     """
     Selects a retrieval chain based on the given chain type and returns a RetrievalQA object.
 
@@ -206,23 +189,6 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
         langchain.chains.RetrievalQA: A RetrievalQA object based on the selected retrieval chain.
     """
     match params["chain_type"]:
-        case "map_reduce":
-            QUESTION_PROMPT = PromptTemplate(
-                template=QUESTION_TEMPLATE, input_variables=["context", "question"]
-            )
-            COMBINE_PROMPT = PromptTemplate(
-                template=COMBINED_TEMPLATE, input_variables=["summaries", "question"]
-            )
-            qa = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type=params["chain_type"],
-                retriever=retriever,
-                return_source_documents=True,
-                chain_type_kwargs={
-                    "question_prompt": QUESTION_PROMPT,
-                    "combine_prompt": COMBINE_PROMPT,
-                },
-            )
         case "stuff":
             output_parser = RegexParser(
                 regex=r"(.*?)\nScore: (.*)",
@@ -235,6 +201,8 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
             )
             qa = load_qa_chain(llm, prompt=STUFF_PROMPT, chain_type="stuff")
 
+        case "map_reduce":
+            raise NotImplementedError
         case _default:
             print(f"Chain type {params['chain_type']} not supported!")
             exit
@@ -242,36 +210,46 @@ def select_retrieval_chain(llm: LLM, retriever: VectorStore, params: dict):
 
 
 def retrieve_document_neighborhood(
-    db_client, retriever: VectorStore, query: str, params: dict
+    retriever: weaviate.Client, query: str, params: dict
 ) -> List[Document]:
     """
     Retrieve the neighborhood of documents around the top-k documents returned by a similarity search.
 
     Args:
-        retriever (VectorStore): A VectorStore object used to perform the similarity search.
+        retriever (weaviate.Client): A VectorStore object used to perform the similarity search.
         query (str): The query string used to perform the similarity search.
         params (dict): A dictionary containing parameters for the neighborhood retrieval.
 
     Returns:
         List[Document]: A list of dictionaries representing the documents in the neighborhood.
     """
-    k = params["target_source_chunks"]
-    overlap = params["paragraph_overlap"]
 
-    candidate_docs = retriever.vectorstore.similarity_search(
-        query=query,
-        k=k,
-        search_distance="cos",
-    )
+    overlap = params["paragraph_overlap"]
+    if overlap > 0:
+        k = params["target_source_chunks"]
+    else:
+        k = params["target_source_chunks"] + 4
+    class_name = os.environ["WEAVIATE_INDEX_NAME"]
+
+    candidate_docs = (
+        retriever.query.get(class_name, ["text", "source", "doc_id", "page"])
+        .with_hybrid(query, properties=["text"])
+        .with_limit(k)
+        .with_additional(["score"])
+        .do()
+    )["data"]["Get"][class_name]
 
     if overlap != 0 or params["remote_emb"]:
         # Picking the neighborhood of the each document based on its id
-        getter = get_all_documents_from_db(db_client)
+        getter = get_all_documents_from_db(retriever)
         all_docs_and_metas = {
             k["doc_id"]: v for k, v in zip(getter["metadatas"], getter["documents"])
         }
 
-        candidate_docs_id = [doc.metadata["doc_id"] for doc in candidate_docs]
+        candidate_docs_id = [
+            {"source": doc["source"], "page": doc["page"], "doc_id": doc["doc_id"]}
+            for doc in candidate_docs
+        ]
 
         # adding the overlap neighborhood ids
 
@@ -289,6 +267,15 @@ def retrieve_document_neighborhood(
         candidate_docs = [
             Document(page_content=doc, metadata=meta)
             for doc, meta in zip(docs, metadatas)
+        ]
+    else:
+        metadatas = [
+            {"source": doc["source"], "page": doc["page"], "doc_id": doc["doc_id"]}
+            for doc in candidate_docs
+        ]
+        candidate_docs = [
+            Document(page_content=doc["text"], metadata=meta)
+            for doc, meta in zip(candidate_docs, metadatas)
         ]
 
     return candidate_docs
