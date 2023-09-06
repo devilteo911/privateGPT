@@ -35,7 +35,6 @@ load_dotenv()
 
 
 # Load environment variables
-persist_directory = os.environ.get("PERSIST_DIRECTORY")
 source_directory = os.environ.get("SOURCE_DIRECTORY", "source_documents")
 embeddings_model_name = os.environ.get("EMBEDDINGS_MODEL_NAME")
 openai_api_base = os.environ.get("OPENAI_API_BASE")
@@ -249,10 +248,6 @@ def calculate_md5(file_path):
 
         md5_list.append({str(filename): file_hash})
     return md5_list
-
-
-def add_metadatas_to_text(texts, stored_metadatas):
-    pass
 
 
 def skip_already_processed_documents(md5_list, db_client):
