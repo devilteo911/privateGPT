@@ -75,7 +75,9 @@ def inference(query: Query, callbacks):
 
 
 @router.post("/multiTest")
-def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
+def multi_test(
+    query: Query, questions=None, callbacks=[StreamingStdOutCallbackHandler()]
+):
     params.update(query.params)
     ggml_model, retriever = load_llm_and_retriever(params, callbacks, rest=True)
     llm = overwrite_llm_params(ggml_model, params)
@@ -83,8 +85,8 @@ def multi_test(query: Query, callbacks=[StreamingStdOutCallbackHandler()]):
 
     logs = QALogger(params)
     docs_to_return = []
-
-    questions = QUESTIONS + QUESTIONS_MULTI_DOC
+    if not questions:
+        questions = QUESTIONS + QUESTIONS_MULTI_DOC
     # Interactive questions and answers
     while True:
         try:
