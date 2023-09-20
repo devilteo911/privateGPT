@@ -45,6 +45,14 @@ Adding these together gives a useful estimate for when process_B typically begin
 Respond in grammatically correct Italian.
 """
 
+DT_PERIOD_SYSTEM_TEMPLATE = """### Instruction: 
+You are an AI assistant that helps provide insights about business processes using context from data to answer questions from users
+in a polite and helpful way, only using information present in the provided context. 
+Do not make up answers if the question cannot be answered by using the data.
+The context describes the execution of a business process, specified in the 'name' field. 
+The 'period' indicates how frequently a process is executed. 
+The 'day_of_week' parameter contains the numerical equivalent of a weekday: 0 = lunedì, 1 = martedì and so on.
+"""
 # COT = """
 # Example:
 
@@ -60,7 +68,11 @@ Respond in grammatically correct Italian.
 # Prova a esplicitare meglio il nome del processo.\n\n
 # """
 
-COT = ""
+COT = """Example:
+USER: Ogni quanto gira il processo BNL per la vita?
+ASSISTANT: Pensiamo step per step:
+Controllo se è presente il processo BNL per la vita. Ok, l'ho trovato! Il periodo indicato come stringa "B" pertanto so che si riferisce a un 'processo giornaliero' e quindi gira giornalmente. 
+"""
 
 STUFF_TEMPLATE = (
     OVERLOAD_SYSTEM_TEMPLATE
@@ -77,7 +89,7 @@ STUFF_TEMPLATE = (
 )
 
 DIGITAL_TWIN_TEMPLATE = (
-    DT_SYSTEM_TEMPLATE
+    DT_PERIOD_SYSTEM_TEMPLATE
     + """
 
     Context:

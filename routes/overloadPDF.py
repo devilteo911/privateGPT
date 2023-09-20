@@ -5,13 +5,17 @@ import sys
 from dotenv import load_dotenv
 from fastapi import APIRouter
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+from loguru import logger
+from openai import InvalidRequestError
 from pydantic import BaseModel
 import weaviate
+from langchain.embeddings import LlamaCppEmbeddings
 
 from utils.helper import QALogger
 from constants import PARAMS, QUESTIONS, QUESTIONS_MULTI_DOC
 from utils.utils import (
     SimpleStreamlitCallbackHandler,
+    initialize_llm,
     load_llm_and_retriever,
     overwrite_llm_params,
     parse_arguments,
@@ -59,7 +63,15 @@ def inference(query: Query, callbacks):
     relevant_docs = retrieve_document_neighborhood(db_client, query, params)
 
     # Get the answer from the chain
-    res = qa({"input_documents": relevant_docs, "question": query})
+    try:
+        res = qa({"input_documents": relevant_docs, "question": query})
+    except InvalidRequestError as e:
+        logger.error(f"{e}")
+        res = {
+            "output_text": "Mi dispiace ma la richiesta è troppo lunga o ha ritornato troppi documenti, per favore riprova con una domanda diversa!",
+            "input_documents": relevant_docs,
+        }
+
     answer, docs = (
         res["output_text"],
         [] if args.hide_source else res["input_documents"],
@@ -122,7 +134,7 @@ def multi_test(
 @router.post("/simpleChat")
 def simple_chat(query: dict, callbacks=[StreamingStdOutCallbackHandler()]):
     params.update(query["params"])
-    ggml_model, _ = load_llm_and_retriever(params, callbacks, rest=True)
+    ggml_model= initialize_llm(params, callbacks, rest=True)
     llm = overwrite_llm_params(ggml_model, params)
-    out = llm.generate(prompts=[query["query"]]).generations[0][0].text
+    out = llm.generate(prompts=[query["query"]]).generations[0][0].text + "\n\n"
     return out
